@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Erweiterte Juristische Dokumenten-Challenge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <style>
+        .wheel-container {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            margin: 0 auto;
+        }
+        .wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            position: relative;
+            overflow: hidden;
+            transition: transform 8s cubic-bezier(0.15, 0.02, 0.05, 0.95);
+            transform: rotate(0deg);
+            border: 20px solid #1e3a8a;
+            box-shadow: 
+                0 0 0 8px #3b82f6,
+                0 0 0 20px #1e40af,
+                0 0 40px rgba(0, 0, 0, 0.5),
+                inset 0 0 80px rgba(255, 255, 255, 0.1);
+        }
+        .wheel-section {
+            position: absolute;
+            width: 50%;
+            height: 50%;
+            transform-origin: 100% 100%;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            font-size: 14px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            padding-top: 20px;
+            text-align: center;
+        }
+        .wheel-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(45deg, #1e3a8a, #3b82f6, #1e3a8a);
+            border-radius: 50%;
+            z-index: 10;
+            box-shadow: 0 0 30px rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            border: 5px solid #fbbf24;
+            font-size: 24px;
+        }
+        .wheel-pointer {
+            position: absolute;
+            top: -35px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 30px solid transparent;
+            border-right: 30px solid transparent;
+            border-top: 60px solid #dc2626;
+            z-index: 15;
+            filter: drop-shadow(0 8px 15px rgba(0,0,0,0.4));
+            animation: pointerBob 2s ease-in-out infinite;
+        }
+        @keyframes pointerBob {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(-8px); }
+        }
+        .wheel-glow {
+            position: absolute;
+            top: -60px;
+            left: -60px;
+            right: -60px;
+            bottom: -60px;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, #3b82f6, #10b981, #f59e0b, #ef4444, #8b5cf6, #ec4899, #6366f1, #14b8a6, #3b82f6);
+            z-index: -1;
+            opacity: 0.4;
+            animation: wheelGlow 4s linear infinite;
+        }
+        @keyframes wheelGlow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .wheel-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: modalFadeIn 0.5s ease-out;
+        }
+        @keyframes modalFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .wheel-modal-content {
+            background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+            border-radius: 30px;
+            padding: 40px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow: auto;
+            animation: modalSlideIn 0.6s ease-out;
+        }
+        @keyframes modalSlideIn {
+            from { transform: translateY(50px) scale(0.8); opacity: 0; }
+            to { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        .sparkle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: #fbbf24;
+            border-radius: 50%;
+            animation: sparkle 2s linear infinite;
+        }
+        @keyframes sparkle {
+            0%, 100% { opacity: 0; transform: scale(0); }
+            50% { opacity: 1; transform: scale(1); }
+        }
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #10b981;
+            animation: confetti 3s linear infinite;
+        }
+        @keyframes confetti {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        .placeholder {
+            background-color: #f3f4f6;
+            border: 2px dashed #9ca3af;
+            border-radius: 6px;
+            padding: 4px 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 120px;
+            min-height: 24px;
+            display: inline-block;
+            text-align: center;
+        }
+        .placeholder:hover {
+            background-color: #e5e7eb;
+            border-color: #6b7280;
+            transform: translateY(-1px);
+        }
+        .placeholder.correct {
+            background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+            border: 2px solid #10b981;
+            color: #065f46;
+        }
+        .placeholder.incorrect {
+            background: linear-gradient(135deg, #fee2e2, #fecaca);
+            border: 2px solid #ef4444;
+            color: #991b1b;
+        }
+        .slide-in {
+            animation: slideIn 0.6s ease-out forwards;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateY(50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        .bounce {
+            animation: bounce 0.6s ease;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .level-progress {
+            background: linear-gradient(90deg, #10b981 0%, #3b82f6 100%);
+            height: 8px;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        .timer-bar {
+            background: linear-gradient(90deg, #ef4444 0%, #f59e0b 50%, #10b981 100%);
+            height: 6px;
+            border-radius: 3px;
+            transition: width 1s linear;
+        }
+        .score-animation {
+            animation: scoreBonus 1s ease-out;
+        }
+        @keyframes scoreBonus {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-30px) scale(1.2); opacity: 0; }
+        }
+        .level-complete {
+            animation: levelComplete 0.8s ease-out;
+        }
+        @keyframes levelComplete {
+            0% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.1) rotate(5deg); }
+            100% { transform: scale(1) rotate(0deg); }
+        }
+        .document-container {
+            transition: all 0.3s ease;
+        }
+        .document-container.highlight {
+            box-shadow: 0 0 0 3px #10b981;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-purple-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header with Score and Level -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-900 to-purple-900 bg-clip-text text-transparent mb-4">
+                Erweiterte Juristische Dokumenten-Challenge
+            </h1>
+            <div class="flex justify-center items-center space-x-8 mb-4">
+                <div class="bg-white rounded-lg px-6 py-3 shadow-md">
+                    <div class="text-sm text-gray-600">Level</div>
+                    <div class="text-2xl font-bold text-blue-600" id="currentLevel">1</div>
+                </div>
+                <div class="bg-white rounded-lg px-6 py-3 shadow-md">
+                    <div class="text-sm text-gray-600">Punkte</div>
+                    <div class="text-2xl font-bold text-green-600" id="currentScore">0</div>
+                </div>
+                <div class="bg-white rounded-lg px-6 py-3 shadow-md">
+                    <div class="text-sm text-gray-600">Zeit</div>
+                    <div class="text-2xl font-bold text-orange-600" id="timeRemaining">240</div>
+                </div>
+            </div>
+            <div class="max-w-md mx-auto bg-gray-200 rounded-full h-3 mb-4">
+                <div class="level-progress rounded-full h-3" id="levelProgress" style="width: 0%"></div>
+            </div>
+            <div class="max-w-md mx-auto bg-gray-200 rounded-full h-2">
+                <div class="timer-bar rounded-full h-2" id="timerBar" style="width: 100%"></div>
+            </div>
+        </header>
+
+        <!-- Level 1: Basic Document Fill -->
+        <div id="level1" class="game-level">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-blue-800 mb-2">Level 1: Grundlegender Dienstleistungsvertrag</h2>
+                <p class="text-gray-600">Ziehen Sie die Informationen aus dem Originaldokument in die entsprechenden Felder des Vertrags</p>
+            </div>
+            <div class="grid md:grid-cols-5 gap-6 mb-8">
+                <div class="md:col-span-2 bg-white p-6 rounded-2xl shadow-lg">
+                    <h3 class="text-xl font-semibold text-blue-800 mb-4 flex items-center">
+                        <i class="fas fa-file-alt mr-2"></i> Originaldokument
+                    </h3>
+                    <div class="space-y-3" id="originalDocument1">
+                        <!-- Documents will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <div class="md:col-span-3 bg-white p-6 rounded-2xl shadow-lg">
+                    <h3 class="text-xl font-semibold text-blue-800 mb-4 flex items-center">
+                        <i class="fas fa-edit mr-2"></i> Dokumentvorlage ausfüllen
+                    </h3>
+                    <div class="border-2 border-gray-200 rounded-xl p-6 min-h-[400px] bg-gray-50" id="documentTemplate1">
+                        <!-- Template will be populated by JavaScript -->
+                    </div>
+
+                    <div class="flex space-x-4 mt-6">
+                        <button id="checkBtn1" class="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3 px-8 rounded-xl transition-all transform hover:scale-105 flex items-center shadow-lg">
+                            <i class="fas fa-check mr-2"></i> Überprüfen
+                        </button>
+                        <button id="hintBtn1" class="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white py-3 px-8 rounded-xl transition-all transform hover:scale-105 flex items-center shadow-lg">
+                            <i class="fas fa-lightbulb mr-2"></i> Hinweis (-10 Punkte)
+                        </button>
+                    </div>
+
+                    <div id="successMessage1" class="hidden mt-4 p-4 bg-gradient-to-r from-green-100 to-green-50 text-green-800 rounded-xl border border-green-200">
+                        <div class="flex items-center">
+                            <i class="fas fa-check-circle text-2xl mr-3"></i>
+                            <div>
+                                <p class="font-bold">Level 1 abgeschlossen!</p>
+                                <p>+100 Bonuspunkte! Weiter zum nächsten Level.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="errorMessage1" class="hidden mt-4 p-4 bg-gradient-to-r from-red-100 to-red-50 text-red-800 rounded-xl border border-red-200">
+                        <div class="flex items-center">
+                            <i class="fas fa-exclamation-circle text-2xl mr-3"></i>
+                            <p class="font-medium">Einige Platzhalter sind nicht korrekt. Versuchen Sie es nochmal!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Level 2: Advanced Document Assembly -->
+        <div id="level2" class="game-level hidden">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-blue-800 mb-2">Level 2: Komplexer Gesellschaftsvertrag</h2>
+                <p class="text-gray-600">Erstellen Sie einen vollständigen GmbH-Gesellschaftsvertrag</p>
+            </div>
+            <div class="max-w-6xl mx-auto bg-white p-8 rounded-2xl shadow-lg">
+                <div class="grid md:grid-cols-3 gap-6">
+                    <div class="bg-gray-50 p-6 rounded-xl">
+                        <h3 class="text-lg font-semibold mb-4 text-blue-800">Verfügbare Informationen</h3>
+                        <div class="space-y-3" id="originalDocument2">
+                            <!-- Documents will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    <div class="md:col-span-2 bg-gray-50 p-6 rounded-xl">
+                        <h3 class="text-lg font-semibold mb-4 text-blue-800">Gesellschaftsvertrag</h3>
+                        <div class="bg-white p-6 rounded-lg min-h-[500px] border-2 border-dashed border-gray-300" id="documentTemplate2">
+                            <!-- Template will be populated by JavaScript -->
+                        </div>
+                        <div class="mt-6 flex space-x-4">
+                            <button id="checkBtn2" class="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3 px-8 rounded-xl transition-all transform hover:scale-105 flex items-center shadow-lg">
+                                <i class="fas fa-check mr-2"></i> Vertrag prüfen
+                            </button>
+                            <button id="hintBtn2" class="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white py-3 px-8 rounded-xl transition-all transform hover:scale-105 flex items-center shadow-lg">
+                                <i class="fas fa-lightbulb mr-2"></i> Hinweis (-20 Punkte)
+                            </button>
+                        </div>
+
+                        <div id="successMessage2" class="hidden mt-4 p-4 bg-gradient-to-r from-green-100 to-green-50 text-green-800 rounded-xl border border-green-200">
+                            <div class="flex items-center">
+                                <i class="fas fa-check-circle text-2xl mr-3"></i>
+                                <div>
+                                    <p class="font-bold">Alle Level abgeschlossen!</p>
+                                    <p>+200 Bonuspunkte! Zeit für das Glücksrad!</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="errorMessage2" class="hidden mt-4 p-4 bg-gradient-to-r from-red-100 to-red-50 text-red-800 rounded-xl border border-red-200">
+                            <div class="flex items-center">
+                                <i class="fas fa-exclamation-circle text-2xl mr-3"></i>
+                                <p class="font-medium">Einige Platzhalter sind nicht korrekt. Versuchen Sie es nochmal!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wheel of Fortune Modal -->
+        <div id="wheelModal" class="wheel-modal hidden">
+            <div class="wheel-modal-content">
+                <h2 class="text-4xl font-bold text-white mb-6 flex items-center justify-center">
+                    <i class="fas fa-gift mr-3 text-yellow-400"></i> 
+                    Das große Glücksrad!
+                    <i class="fas fa-gift ml-3 text-yellow-400"></i>
+                </h2>
+                
+                <div class="wheel-container">
+                    <div class="wheel-glow"></div>
+                    <div class="wheel-pointer"></div>
+                    <div class="wheel" id="wheel"></div>
+                    <div class="wheel-center">
+                        <i class="fas fa-star text-yellow-400"></i>
+                    </div>
+                </div>
+
+                <div class="mt-8">
+                    <button id="spinBtn" class="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white py-4 px-12 rounded-full text-2xl font-bold transform hover:scale-110 transition-all shadow-2xl border-4 border-yellow-300">
+                        <i class="fas fa-magic mr-3"></i> DREHEN! <i class="fas fa-magic ml-3"></i>
+                    </button>
+                </div>
+
+                <div id="prizeMessage" class="hidden mt-8 p-6 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-2xl border-4 border-yellow-300 relative overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 opacity-20 animate-pulse"></div>
+                    <div class="relative z-10">
+                        <h3 class="text-3xl font-bold mb-4">🎉 HERZLICHEN GLÜCKWUNSCH! 🎉</h3>
+                        <p class="text-2xl mb-6">Sie haben gewonnen:</p>
+                        <p class="text-4xl font-bold text-yellow-300 mb-6" id="prizeText">---</p>
+                        <div class="space-x-4">
+                            <button id="playAgainBtn" class="bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white py-3 px-8 rounded-xl transform hover:scale-105 transition-all shadow-lg border-2 border-white">
+                                <i class="fas fa-redo mr-2"></i> Nochmal spielen
+                            </button>
+                            <button id="shareBtn" class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 px-8 rounded-xl transform hover:scale-105 transition-all shadow-lg border-2 border-white">
+                                <i class="fas fa-share mr-2"></i> Teilen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wheel of Fortune -->
+        <div id="wheelSection" class="hidden max-w-4xl mx-auto slide-in">
+            <div class="bg-white p-8 rounded-2xl shadow-lg text-center">
+                <h2 class="text-3xl font-bold text-blue-800 mb-6 flex items-center justify-center">
+                    <i class="fas fa-gift mr-3"></i> Das große Glücksrad!
+                </h2>
+                
+                <div class="wheel-container">
+                    <div class="wheel-glow"></div>
+                    <div class="wheel-pointer"></div>
+                    <div class="wheel" id="wheel"></div>
+                    <div class="wheel-center">
+                        <i class="fas fa-star text-yellow-400"></i>
+                    </div>
+                </div>
+
+                <div class="mt-8">
+                    <button id="spinBtn" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-4 px-12 rounded-full text-xl font-bold transform hover:scale-105 transition-all shadow-lg">
+                        <i class="fas fa-magic mr-2"></i> Das Rad drehen!
+                    </button>
+                </div>
+
+                <div id="prizeMessage" class="hidden mt-8 p-6 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-800 rounded-2xl border border-purple-200">
+                    <h3 class="text-2xl font-bold mb-3">🎉 Herzlichen Glückwunsch!</h3>
+                    <p class="text-xl mb-4">Sie haben gewonnen: <span id="prizeText" class="font-bold text-purple-900">---</span></p>
+                    <div class="space-x-4">
+                        <button id="playAgainBtn" class="bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white py-3 px-8 rounded-xl transform hover:scale-105 transition-all">
+                            <i class="fas fa-redo mr-2"></i> Nochmal spielen
+                        </button>
+                        <button id="shareBtn" class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 px-8 rounded-xl transform hover:scale-105 transition-all">
+                            <i class="fas fa-share mr-2"></i> Teilen
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+            <div class="bg-white p-8 rounded-2xl shadow-2xl text-center max-w-md">
+                <h2 class="text-2xl font-bold text-red-600 mb-4">
+                    <i class="fas fa-clock mr-2"></i> Zeit abgelaufen!
+                </h2>
+                <p class="text-gray-700 mb-4">Ihre Endpunktzahl: <span id="finalScore" class="font-bold text-blue-600">0</span></p>
+                <button id="restartBtn" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-6 rounded-lg">
+                    Nochmal versuchen
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game state
+        let gameState = {
+            currentLevel: 1,
+            maxLevel: 2,
+            score: 0,
+            timeRemaining: 240,
+            gameTimer: null,
+            selectedData: {}
+        };
+
+        // Game data
+        const levelData = {
+            1: {
+                title: "Grundlegender Vertrag",
+                documents: [
+                    { id: "name", text: "Name des Kunden", value: "Dr. Maria Schmidt" },
+                    { id: "address", text: "Adresse", value: "Königsallee 45, 40212 Düsseldorf" },
+                    { id: "date", text: "Datum des Vertragsabschlusses", value: "23.11.2024" },
+                    { id: "amount", text: "Vertragssumme", value: "€25.750,00" },
+                    { id: "clause", text: "Standardklausel", value: "Die Vertragsparteien vereinbaren eine Kündigungsfrist von 6 Monaten zum Quartalsende." }
+                ],
+                template: `
+                    <h3 class="text-lg font-bold mb-4">Dienstleistungsvertrag</h3>
+                    <p class="mb-3">Vertrag zwischen <span class="placeholder" data-target="name"></span> (im Folgenden "Kunde" genannt) und der Schmidt & Partner Rechtsanwaltsgesellschaft mbH.</p>
+                    <p class="mb-3">Der Kunde mit Wohnsitz in <span class="placeholder" data-target="address"></span> schließt folgenden Dienstleistungsvertrag:</p>
+                    <p class="mb-3">Am <span class="placeholder" data-target="date"></span> wird zwischen den Parteien ein Beratungsvertrag über eine Summe von <span class="placeholder" data-target="amount"></span> vereinbart.</p>
+                    <p class="mb-4"><span class="placeholder" data-target="clause"></span></p>
+                    <br>
+                    <p class="mb-2">Ort, Datum: _________________</p>
+                    <p>Unterschrift Kunde: _________________</p>
+                `
+            },
+            2: {
+                title: "Komplexer Gesellschaftsvertrag",
+                documents: [
+                    { id: "company", text: "Firmenname", value: "TechInnovate Solutions GmbH" },
+                    { id: "purpose", text: "Geschäftszweck", value: "Entwicklung und Vertrieb von Software-Lösungen" },
+                    { id: "capital", text: "Stammkapital", value: "€100.000,00" },
+                    { id: "shares1", text: "Anteil Gesellschafter 1", value: "60% (€60.000)" },
+                    { id: "shares2", text: "Anteil Gesellschafter 2", value: "40% (€40.000)" },
+                    { id: "managing", text: "Geschäftsführung", value: "Beide Gesellschafter gemeinschaftlich" },
+                    { id: "representation", text: "Vertretungsberechtigung", value: "Einzelvertretung ab €50.000 nur gemeinsam" }
+                ],
+                template: `
+                    <h3 class="text-lg font-bold mb-4">Gesellschaftsvertrag einer GmbH</h3>
+                    <p class="mb-3"><strong>§ 1 Firmenname und Sitz</strong></p>
+                    <p class="mb-3">Die Gesellschaft führt die Firma <span class="placeholder" data-target="company"></span> mit Sitz in München.</p>
+                    
+                    <p class="mb-3"><strong>§ 2 Gegenstand des Unternehmens</strong></p>
+                    <p class="mb-3">Gegenstand des Unternehmens ist <span class="placeholder" data-target="purpose"></span>.</p>
+                    
+                    <p class="mb-3"><strong>§ 3 Stammkapital und Geschäftsanteile</strong></p>
+                    <p class="mb-3">Das Stammkapital der Gesellschaft beträgt <span class="placeholder" data-target="capital"></span>.</p>
+                    <p class="mb-3">Gesellschafter A hält <span class="placeholder" data-target="shares1"></span></p>
+                    <p class="mb-3">Gesellschafter B hält <span class="placeholder" data-target="shares2"></span></p>
+                    
+                    <p class="mb-3"><strong>§ 4 Geschäftsführung</strong></p>
+                    <p class="mb-3">Die Geschäftsführung erfolgt durch <span class="placeholder" data-target="managing"></span>.</p>
+                    
+                    <p class="mb-3"><strong>§ 5 Vertretung</strong></p>
+                    <p class="mb-4">Vertretungsberechtigung: <span class="placeholder" data-target="representation"></span>.</p>
+                `
+            }
+        };
+
+        const wheelPrizes = [
+            { text: "€500 Gutschein", color: "#3b82f6", weight: 5 },
+            { text: "Kostenlose Rechtsberatung", color: "#10b981", weight: 15 },
+            { text: "Rechtsbuch-Set", color: "#f59e0b", weight: 20 },
+            { text: "Nächstes Mal!", color: "#ef4444", weight: 25 },
+            { text: "50% Rabatt", color: "#8b5cf6", weight: 15 },
+            { text: "Gratis eBook-Bibliothek", color: "#ec4899", weight: 10 },
+            { text: "Premium Seminar", color: "#6366f1", weight: 5 },
+            { text: "Webinar-Paket", color: "#14b8a6", weight: 15 }
+        ];
+
+        // Initialize game
+        document.addEventListener('DOMContentLoaded', function() {
+            initGame();
+            startTimer();
+        });
+
+        function initGame() {
+            updateUI();
+            loadLevel(gameState.currentLevel);
+        }
+
+        function updateUI() {
+            document.getElementById('currentLevel').textContent = gameState.currentLevel;
+            document.getElementById('currentScore').textContent = gameState.score;
+            document.getElementById('timeRemaining').textContent = gameState.timeRemaining;
+            
+            const progressPercent = ((gameState.currentLevel - 1) / (gameState.maxLevel - 1)) * 100;
+            document.getElementById('levelProgress').style.width = progressPercent + '%';
+        }
+
+        function startTimer() {
+            gameState.gameTimer = setInterval(() => {
+                gameState.timeRemaining--;
+                document.getElementById('timeRemaining').textContent = gameState.timeRemaining;
+                
+                const timerPercent = (gameState.timeRemaining / 240) * 100;
+                document.getElementById('timerBar').style.width = timerPercent + '%';
+                
+                if (gameState.timeRemaining <= 0) {
+                    gameOver();
+                }
+            }, 1000);
+        }
+
+        function loadLevel(level) {
+            // Hide all levels
+            document.querySelectorAll('.game-level').forEach(el => el.classList.add('hidden'));
+            
+            if (level === 1) {
+                loadDocumentLevel(1);
+                document.getElementById('level1').classList.remove('hidden');
+            } else if (level === 2) {
+                loadDocumentLevel(2);
+                document.getElementById('level2').classList.remove('hidden');
+            }
+        }
+
+        function loadDocumentLevel(levelNum) {
+            const data = levelData[levelNum];
+            const originalDoc = document.getElementById(`originalDocument${levelNum}`);
+            const template = document.getElementById(`documentTemplate${levelNum}`);
+            
+            // Clear containers
+            originalDoc.innerHTML = '';
+            template.innerHTML = data.template;
+            
+            // Populate original documents
+            data.documents.forEach(doc => {
+                const div = document.createElement('div');
+                div.className = 'p-4 bg-gradient-to-r from-gray-100 to-gray-50 rounded-lg document-draggable cursor-move transform hover:scale-105 transition-all';
+                div.setAttribute('draggable', 'true');
+                div.setAttribute('data-id', doc.id);
+                div.innerHTML = `<p class="font-medium text-gray-700">${doc.text}: <span class="text-blue-600 font-semibold">${doc.value}</span></p>`;
+                originalDoc.appendChild(div);
+            });
+            
+            setupDragAndDrop(levelNum);
+        }
+
+        function setupDragAndDrop(levelNum) {
+            const draggables = document.querySelectorAll(`#originalDocument${levelNum} .document-draggable`);
+            const placeholders = document.querySelectorAll(`#documentTemplate${levelNum} .placeholder`);
+            
+            draggables.forEach(draggable => {
+                draggable.addEventListener('dragstart', dragStart);
+                draggable.addEventListener('click', () => highlightDraggable(draggable));
+            });
+            
+            placeholders.forEach(placeholder => {
+                placeholder.addEventListener('dragover', dragOver);
+                placeholder.addEventListener('dragenter', dragEnter);
+                placeholder.addEventListener('dragleave', dragLeave);
+                placeholder.addEventListener('drop', drop);
+                placeholder.addEventListener('click', () => highlightPlaceholder(placeholder));
+            });
+            
+            document.getElementById(`checkBtn${levelNum}`).addEventListener('click', () => checkLevel(levelNum));
+            document.getElementById(`hintBtn${levelNum}`).addEventListener('click', () => showHint(levelNum));
+        }
+
+        function highlightDraggable(draggable) {
+            document.querySelectorAll('.document-draggable').forEach(el => {
+                el.classList.remove('ring-4', 'ring-blue-300');
+            });
+            draggable.classList.add('ring-4', 'ring-blue-300');
+        }
+
+        function highlightPlaceholder(placeholder) {
+            document.querySelectorAll('.placeholder').forEach(el => {
+                el.classList.remove('ring-4', 'ring-yellow-300');
+            });
+            placeholder.classList.add('ring-4', 'ring-yellow-300');
+        }
+
+        function dragStart(e) {
+            e.dataTransfer.setData('text/plain', this.dataset.id);
+            highlightDraggable(this);
+        }
+
+        function dragOver(e) {
+            e.preventDefault();
+        }
+
+        function dragEnter(e) {
+            e.preventDefault();
+            this.classList.add('bg-blue-100', 'border-blue-400');
+        }
+
+        function dragLeave() {
+            this.classList.remove('bg-blue-100', 'border-blue-400');
+        }
+
+        function drop(e) {
+            e.preventDefault();
+            this.classList.remove('bg-blue-100', 'border-blue-400');
+            
+            const dataId = e.dataTransfer.getData('text/plain');
+            const draggable = document.querySelector(`.document-draggable[data-id="${dataId}"]`);
+            
+            if (this.dataset.target === dataId) {
+                const value = draggable.querySelector('span').textContent;
+                this.textContent = value;
+                this.classList.add('correct');
+                this.classList.remove('incorrect');
+                gameState.selectedData[this.dataset.target] = true;
+                
+                this.classList.add('bounce');
+                setTimeout(() => this.classList.remove('bounce'), 600);
+                addScore(10);
+            } else {
+                this.classList.add('incorrect');
+                addScore(-5);
+                setTimeout(() => {
+                    this.classList.remove('incorrect');
+                    this.textContent = '';
+                }, 1000);
+            }
+        }
+
+        function checkLevel(levelNum) {
+            const placeholders = document.querySelectorAll(`#documentTemplate${levelNum} .placeholder`);
+            let allCorrect = true;
+            
+            placeholders.forEach(placeholder => {
+                if (!placeholder.classList.contains('correct')) {
+                    allCorrect = false;
+                    placeholder.classList.add('incorrect');
+                    setTimeout(() => placeholder.classList.remove('incorrect'), 1000);
+                }
+            });
+            
+            if (allCorrect) {
+                completeLevel(levelNum);
+            } else {
+                showError(levelNum, "Einige Platzhalter sind nicht korrekt ausgefüllt.");
+                addScore(-20);
+            }
+        }
+
+        function completeLevel(levelNum) {
+            document.getElementById(`errorMessage${levelNum}`).classList.add('hidden');
+            document.getElementById(`successMessage${levelNum}`).classList.remove('hidden');
+            
+            if (levelNum === 1) {
+                addScore(100);
+                setTimeout(() => {
+                    gameState.currentLevel = 2;
+                    gameState.selectedData = {}; // Reset for next level
+                    updateUI();
+                    loadLevel(2);
+                }, 2000);
+            } else if (levelNum === 2) {
+                addScore(200);
+                setTimeout(() => {
+                    showWheel();
+                }, 2000);
+            }
+        }
+
+        function showError(levelNum, message) {
+            const errorDiv = document.getElementById(`errorMessage${levelNum}`);
+            errorDiv.querySelector('p').textContent = message;
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => errorDiv.classList.add('hidden'), 3000);
+        }
+
+        function showHint(levelNum) {
+            const hintCost = levelNum === 1 ? 10 : 20;
+            addScore(-hintCost);
+            
+            const hints = {
+                1: "Achten Sie auf die Reihenfolge der Informationen im Originaltext.",
+                2: "Bei Gesellschaftsverträgen sind die Anteile und Vertretungsregeln besonders wichtig."
+            };
+            alert("Hinweis: " + hints[levelNum]);
+        }
+
+        function addScore(points) {
+            gameState.score += points;
+            document.getElementById('currentScore').textContent = gameState.score;
+            
+            // Show score animation
+            if (points > 0) {
+                showScoreBonus(points);
+            }
+        }
+
+        function showScoreBonus(points) {
+            const scoreElement = document.getElementById('currentScore');
+            const bonus = document.createElement('div');
+            bonus.textContent = '+' + points;
+            bonus.className = 'score-animation absolute text-green-600 font-bold';
+            bonus.style.left = scoreElement.offsetLeft + 'px';
+            bonus.style.top = scoreElement.offsetTop + 'px';
+            document.body.appendChild(bonus);
+            
+            setTimeout(() => bonus.remove(), 1000);
+        }
+
+        function showWheel() {
+            clearInterval(gameState.gameTimer);
+            createSparkles();
+            document.getElementById('wheelModal').classList.remove('hidden');
+            initWheel();
+        }
+
+        function createSparkles() {
+            for (let i = 0; i < 20; i++) {
+                const sparkle = document.createElement('div');
+                sparkle.className = 'sparkle';
+                sparkle.style.left = Math.random() * 100 + 'vw';
+                sparkle.style.top = Math.random() * 100 + 'vh';
+                sparkle.style.animationDelay = Math.random() * 2 + 's';
+                document.body.appendChild(sparkle);
+                
+                setTimeout(() => sparkle.remove(), 4000);
+            }
+        }
+
+        function initWheel() {
+            const wheel = document.getElementById('wheel');
+            wheel.innerHTML = '';
+            
+            const totalWeight = wheelPrizes.reduce((sum, prize) => sum + prize.weight, 0);
+            let currentAngle = 0;
+            
+            wheelPrizes.forEach((prize, index) => {
+                const sectionAngle = (prize.weight / totalWeight) * 360;
+                const section = document.createElement('div');
+                section.className = 'wheel-section';
+                section.textContent = prize.text;
+                section.style.background = `linear-gradient(135deg, ${prize.color}, ${adjustBrightness(prize.color, -30)})`;
+                section.style.transform = `rotate(${currentAngle}deg) skewY(${-90 + sectionAngle}deg)`;
+                section.style.transformOrigin = '100% 100%';
+                
+                wheel.appendChild(section);
+                currentAngle += sectionAngle;
+            });
+            
+            document.getElementById('spinBtn').addEventListener('click', spinWheel);
+        }
+
+        function spinWheel() {
+            const spinBtn = document.getElementById('spinBtn');
+            const wheel = document.getElementById('wheel');
+            spinBtn.disabled = true;
+            spinBtn.textContent = 'Dreht...';
+            
+            // Create confetti
+            for (let i = 0; i < 50; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.background = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'][Math.floor(Math.random() * 5)];
+                confetti.style.animationDelay = Math.random() * 1 + 's';
+                document.body.appendChild(confetti);
+                
+                setTimeout(() => confetti.remove(), 3000);
+            }
+            
+            const spins = 8 + Math.random() * 5;
+            const finalAngle = Math.random() * 360;
+            const totalRotation = spins * 360 + finalAngle;
+            
+            wheel.style.transform = `rotate(${totalRotation}deg)`;
+            
+            // Calculate winning prize based on weighted probability
+            const random = Math.random() * 100;
+            let currentWeight = 0;
+            let winningPrize = wheelPrizes[0];
+            
+            for (const prize of wheelPrizes) {
+                currentWeight += (prize.weight / wheelPrizes.reduce((sum, p) => sum + p.weight, 0)) * 100;
+                if (random <= currentWeight) {
+                    winningPrize = prize;
+                    break;
+                }
+            }
+            
+            setTimeout(() => {
+                showPrize(winningPrize);
+            }, 8000);
+        }
+
+        function showPrize(prize) {
+            const prizeMessage = document.getElementById('prizeMessage');
+            document.getElementById('prizeText').textContent = prize.text;
+            prizeMessage.classList.remove('hidden');
+            document.getElementById('spinBtn').classList.add('hidden');
+            
+            // Add more confetti for big win
+            if (prize.weight <= 10) {
+                for (let i = 0; i < 100; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + 'vw';
+                    confetti.style.background = ['#fbbf24', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6'][Math.floor(Math.random() * 5)];
+                    confetti.style.animationDelay = Math.random() * 2 + 's';
+                    document.body.appendChild(confetti);
+                    
+                    setTimeout(() => confetti.remove(), 4000);
+                }
+            }
+            
+            // Setup event listeners for buttons
+            const playAgainBtn = document.getElementById('playAgainBtn');
+            const shareBtn = document.getElementById('shareBtn');
+            
+            // Remove existing listeners
+            playAgainBtn.replaceWith(playAgainBtn.cloneNode(true));
+            shareBtn.replaceWith(shareBtn.cloneNode(true));
+            
+            // Add new listeners
+            document.getElementById('playAgainBtn').addEventListener('click', () => location.reload());
+            document.getElementById('shareBtn').addEventListener('click', shareResult);
+            
+            // Close modal on click outside
+            document.getElementById('wheelModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.classList.add('hidden');
+                }
+            });
+            
+            // Close modal on ESC key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    document.getElementById('wheelModal').classList.add('hidden');
+                }
+            });
+        }
+
+        function shareResult() {
+            const text = `Ich habe die Juristische Dokumenten-Challenge abgeschlossen! Endpunktzahl: ${gameState.score}`;
+            if (navigator.share) {
+                navigator.share({ title: 'Juristische Challenge', text: text });
+            } else {
+                navigator.clipboard.writeText(text);
+                alert('Ergebnis in die Zwischenablage kopiert!');
+            }
+        }
+
+        function gameOver() {
+            clearInterval(gameState.gameTimer);
+            document.getElementById('finalScore').textContent = gameState.score;
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+            
+            document.getElementById('restartBtn').addEventListener('click', () => location.reload());
+        }
+
+        function adjustBrightness(color, amount) {
+            return '#' + color.replace(/^#/, '').replace(/../g, color => ('0'+Math.min(255, Math.max(0, parseInt(color, 16) + amount)).toString(16)).substr(-2));
+        }
+    </script>
+</body>
+</html>

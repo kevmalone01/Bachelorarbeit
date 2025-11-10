@@ -1,0 +1,60 @@
+:root {
+    /* Main color palette */
+    --color-background: #faf9f781;
+    --color-primary: #0d1627;
+    --color-secondary: #94754a;
+
+    /* Derived colors */
+    --color-primary-light: #1a2c4d;
+    --color-primary-dark: #080f1b;
+    --color-secondary-light: #b08e5f;
+    --color-secondary-dark: #7c5f3d;
+
+    /* Neutral colors */
+    --color-text-dark: #0d1627;
+    --color-text-light: #faf9f7;
+    --color-text-muted: #6c6c6c;
+
+    /* UI colors */
+    --color-border: #e6e1d8;
+    --color-surface: #ffffff;
+    --color-surface-alt: #f4f1ec;
+    --color-shadow: rgba(13, 22, 39, 0.08);
+}
+
+/* Global styles */
+body {
+    background-color: var(--color-background);
+    color: var(--color-text-dark);
+    font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Button styles */
+.btn-primary {
+    background-color: var(--color-secondary) !important;
+    color: var(--color-text-light) !important;
+}
+
+.btn-secondary {
+    background-color: var(--color-secondary) !important;
+    color: var(--color-text-light) !important;
+}
+
+/* Card styles */
+.v-card {
+    background-color: var(--color-surface) !important;
+    border-radius: 12px !important;
+}
+
+/* Input styles */
+.v-field__outline {
+    border-color: var(--color-border) !important;
+}
+
+.v-field:hover .v-field__outline {
+    border-color: var(--color-secondary) !important;
+}
+
+.v-field--focused .v-field__outline {
+    border-color: var(--color-primary) !important;
+}

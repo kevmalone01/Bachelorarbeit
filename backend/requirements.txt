@@ -1,0 +1,17 @@
+werkzeug>=2.0.0,<2.1.0
+Flask==2.0.1
+Flask-SQLAlchemy==2.5.1
+SQLAlchemy==1.4.23
+pytest==7.0.1
+pytest-cov==3.0.0
+pytest-flask==1.2.0
+python-dotenv==1.0.0
+marshmallow==3.20.1
+Flask-Migrate==4.0.4
+psycopg2-binary==2.9.7
+requests==2.31.0
+python-docx==0.8.11
+docx==0.2.4
+docx2pdf==0.1.8
+flask-cors==4.0.0
+PyPDF2==3.0.1
