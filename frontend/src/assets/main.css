@@ -1,5 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure white text on primary (blue) Naive UI buttons */
+.n-button--primary-type,
+.n-button--primary-type .n-button__content {
+  color: #ffffff !important;
+}
+.n-button--primary-type:hover .n-button__content,
+.n-button--primary-type:focus .n-button__content,
+.n-button--primary-type:active .n-button__content {
+  color: #ffffff !important;
+}
+.n-dropdown-option--selected .n-dropdown-option__label {
+  color: #ffffff !important;
+}
+.n-badge {
+  color: #ffffff;
 }

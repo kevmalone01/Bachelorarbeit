@@ -3,6 +3,9 @@ import './assets/main.css';
 import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router';
+import { createPinia } from 'pinia';
+import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query';
+import { createDiscreteApi } from 'naive-ui';
 
 // Vuetify
 import 'vuetify/styles';
@@ -47,7 +50,23 @@ const vuetify = createVuetify({
 
 const app = createApp(App)
 
-app.use(router)
-app.use(vuetify)
+// Pinia
+const pinia = createPinia();
+app.use(pinia);
+
+// Router
+app.use(router);
+
+// Vuetify (bestehendes UI bleibt nutzbar)
+app.use(vuetify);
+
+// Vue Query
+const queryClient = new QueryClient();
+app.use(VueQueryPlugin, { queryClient });
+
+// Naive UI discrete API (Notification/Message optional global)
+const { message, notification } = createDiscreteApi(['message', 'notification']);
+app.provide('nMessage', message);
+app.provide('nNotification', notification);
 
 app.mount('#app')
