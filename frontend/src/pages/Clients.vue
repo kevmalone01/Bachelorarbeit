@@ -155,21 +155,53 @@ const advisors = computed(() => advisorsData.value ?? []);
 const legalForms = computed(() => legalFormsData.value ?? []);
 
 // Clients list (gefiltert und paginiert)
-const { data, isLoading, isError, refetch } = useQuery({
-  queryKey: computed(() => ['clients', { ...filters, page: page.value, pageSize: pageSize.value }]),
-  queryFn: () => clientsApi.getClients({
-    query: filters.query,
-    type: filters.type,
-    advisorId: filters.advisorId,
-    legalForm: filters.legalForm,
+const getQueryKey = () => {
+  const params = {
+    query: filters.query || '',
+    type: filters.type || [],
+    advisorId: filters.advisorId || [],
+    legalForm: filters.legalForm || [],
     page: page.value,
     pageSize: pageSize.value,
-  }),
-  keepPreviousData: true
+  };
+  return ['clients', JSON.stringify(params)];
+};
+
+const { data, isLoading, isError, refetch } = useQuery({
+  queryKey: getQueryKey,
+  queryFn: () => {
+    console.log('[Clients] Fetching clients with params:', {
+      query: filters.query,
+      type: filters.type,
+      advisorId: filters.advisorId,
+      legalForm: filters.legalForm,
+      page: page.value,
+      pageSize: pageSize.value,
+    });
+    return clientsApi.getClients({
+      query: filters.query,
+      type: filters.type,
+      advisorId: filters.advisorId,
+      legalForm: filters.legalForm,
+      page: page.value,
+      pageSize: pageSize.value,
+    });
+  },
+  keepPreviousData: true,
+  staleTime: 60_000,
+  refetchOnMount: true,
 });
 
-const clients = computed<ClientItem[]>(() => data.value?.items ?? []);
-const total = computed<number>(() => data.value?.total ?? 0);
+const clients = computed<ClientItem[]>(() => {
+  const items = data.value?.items ?? [];
+  console.log('[Clients] Computed clients:', items.length, 'items');
+  return items;
+});
+const total = computed<number>(() => {
+  const totalValue = data.value?.total ?? 0;
+  console.log('[Clients] Computed total:', totalValue);
+  return totalValue;
+});
 
 // Prüfen, ob alle aktuell angezeigten Clients ausgewählt sind
 const allSelected = computed(() => {
@@ -196,10 +228,30 @@ function onQuery(v: string) { filters.query = v; page.value = 1; }
 function onUpdateMeta(v: Record<string, boolean>) { visibleMeta.value = { ...v }; }
 function onUpdatePageSize(v: number) { pageSize.value = v; prefs.setPageSize(v); }
 function applyFilters(f: { query?: string; type?: string[]; advisorId?: string[]; legalForm?: string[] }) {
-  Object.assign(filters, f); page.value = 1; refetch();
+  // Nur die übergebenen Filter setzen, andere auf Standard zurücksetzen
+  if (f.query !== undefined) filters.query = f.query;
+  if (f.type !== undefined) {
+    filters.type = Array.isArray(f.type) && f.type.length > 0 ? [...f.type] : [];
+  } else {
+    filters.type = [];
+  }
+  if (f.advisorId !== undefined) {
+    filters.advisorId = Array.isArray(f.advisorId) && f.advisorId.length > 0 ? [...f.advisorId] : [];
+  } else {
+    filters.advisorId = [];
+  }
+  if (f.legalForm !== undefined) {
+    filters.legalForm = Array.isArray(f.legalForm) && f.legalForm.length > 0 ? [...f.legalForm] : [];
+  } else {
+    filters.legalForm = [];
+  }
+  page.value = 1;
+  refetch();
 }
 function resetFilters() {
-  Object.assign(filters, { query: '', type: [], advisorId: [], legalForm: [] }); page.value = 1; refetch();
+  Object.assign(filters, { query: '', type: [], advisorId: [], legalForm: [] });
+  page.value = 1;
+  refetch();
 }
 function onView(item: ClientItem) { router.push(`/clients/${item.id}`); }
 async function onDelete(id: string) {

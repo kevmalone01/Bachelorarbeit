@@ -259,4 +259,4 @@ def delete_doc_command(id):
 
 if __name__ == '__main__':
     app.logger.info('Application start')
-    app.run(debug=True)
+    app.run(debug=True, port=5001)

@@ -55,6 +55,12 @@
               <n-form-item path="birthDate" label="Geburtsdatum">
                 <n-date-picker v-model:value="form.birthDate" type="date" value-format="yyyy-MM-dd" placeholder="Geburtsdatum" />
               </n-form-item>
+              <n-form-item path="birthPlace" label="Geburtsort">
+                <n-input v-model:value="form.birthPlace" placeholder="Geburtsort" />
+              </n-form-item>
+              <n-form-item path="nationality" label="Staatsangehörigkeit">
+                <n-input v-model:value="form.nationality" placeholder="z.B. Deutsch" />
+              </n-form-item>
             </div>
           </div>
 
@@ -196,9 +202,11 @@
  * CreateClientModal - Dialog zur Anlage eines Mandanten mit allen Feldern.
  */
 import { computed, ref, watch } from 'vue';
-import { NButton, NCard, NDatePicker, NForm, NFormItem, NInput, NModal, NSelect } from 'naive-ui';
+import { NButton, NCard, NDatePicker, NForm, NFormItem, NInput, NModal, NSelect, createDiscreteApi } from 'naive-ui';
 import type { Advisor, LegalForm, ParticipantRole } from '@/lib/types';
 import { clientsApi } from '@/lib/api';
+
+const { message: nMessage } = createDiscreteApi(['message']);
 
 const props = defineProps<{
   show: boolean;
@@ -225,6 +233,8 @@ const form = ref<any>({
   firstName: '',
   lastName: '',
   birthDate: null,
+  birthPlace: '',
+  nationality: '',
   // Firmendaten
   companyName: '',
   legalForm: undefined,
@@ -378,6 +388,7 @@ async function submit() {
   try {
     await formRef.value?.validate();
   } catch (e) {
+    console.error('Validation error:', e);
     return;
   }
   
@@ -386,7 +397,6 @@ async function submit() {
     // Transform form data to API format
     const payload: any = {
       type: form.value.type,
-      advisorId: form.value.advisorId,
       mandateManager: form.value.mandateManager,
       mandateResponsible: form.value.mandateResponsible,
       street: form.value.street,
@@ -399,44 +409,65 @@ async function submit() {
     };
 
     if (form.value.type === 'Natürliche Person') {
-      payload.salutation = form.value.salutation;
+      // Always include salutation, even if empty (so backend knows to set it to None)
+      payload.salutation = form.value.salutation || null;
       payload.title = form.value.title;
       payload.firstName = form.value.firstName;
       payload.lastName = form.value.lastName;
-      payload.birthDate = form.value.birthDate;
+      payload.birthPlace = form.value.birthPlace;
+      payload.nationality = form.value.nationality;
+      // Ensure birthDate is a string in YYYY-MM-DD format
+      if (form.value.birthDate) {
+        if (typeof form.value.birthDate === 'number') {
+          // If it's a timestamp, convert to date string
+          const date = new Date(form.value.birthDate);
+          payload.birthDate = date.toISOString().split('T')[0];
+        } else if (typeof form.value.birthDate === 'string') {
+          payload.birthDate = form.value.birthDate;
+        } else {
+          // If it's already a Date object or other format
+          const date = new Date(form.value.birthDate);
+          payload.birthDate = date.toISOString().split('T')[0];
+        }
+      }
       payload.taxId = form.value.taxId;
     } else {
       payload.companyName = form.value.companyName;
       payload.legalForm = form.value.legalForm;
       payload.vatId = form.value.vatId;
-      if (form.value.participants && form.value.participants.length > 0) {
-        payload.participants = form.value.participants.map((p: any, idx: number) => ({
-          personId: `new-${idx}`, // Placeholder, backend should assign real IDs
-          firstName: p.firstName,
-          lastName: p.lastName,
-          role: p.role
-        }));
-      }
+      // Contact person fields for companies
+      payload.contactSalutation = form.value.taxOfficeContactSalutation;
+      payload.contactLastName = form.value.taxOfficeContactLastName;
+      payload.contactPhone = form.value.taxOfficeContactPhone;
+      payload.contactEmail = form.value.taxOfficeEmail;
+      payload.contactFax = form.value.taxOfficeFax;
     }
 
-    // Tax office
+    // Tax office - send as flat fields
     if (form.value.taxOfficeZip || form.value.taxOfficeCity || form.value.taxOfficeStreet) {
-      payload.taxOffice = {
-        zip: form.value.taxOfficeZip,
-        city: form.value.taxOfficeCity,
-        street: form.value.taxOfficeStreet,
-        number: form.value.taxOfficeNumber,
-        email: form.value.taxOfficeEmail,
-        fax: form.value.taxOfficeFax,
-        contactSalutation: form.value.taxOfficeContactSalutation,
-        contactLastName: form.value.taxOfficeContactLastName,
-        contactPhone: form.value.taxOfficeContactPhone,
-      };
+      // tax_office is a string field in the backend, we can use the city or a combination
+      payload.taxOffice = form.value.taxOfficeCity || '';
+      payload.taxOfficeZip = form.value.taxOfficeZip;
+      payload.taxOfficeCity = form.value.taxOfficeCity;
+      payload.taxOfficeStreet = form.value.taxOfficeStreet;
+      payload.taxOfficeNumber = form.value.taxOfficeNumber;
+      payload.taxOfficeEmail = form.value.taxOfficeEmail;
+      payload.taxOfficeFax = form.value.taxOfficeFax;
     }
 
-    await clientsApi.createClient(payload);
+    console.log('Submitting client data:', payload);
+    const result = await clientsApi.createClient(payload);
+    console.log('Client created successfully:', result);
+    
+    // Show success message
+    nMessage.success('Mandant erfolgreich angelegt');
+    
     emit('created');
     close();
+  } catch (error: any) {
+    console.error('Error creating client:', error);
+    const errorMsg = error?.message || error?.error || error?.detail?.error || 'Fehler beim Anlegen des Mandanten';
+    nMessage.error(errorMsg);
   } finally {
     submitting.value = false;
   }

@@ -54,11 +54,13 @@
           :total="total"
           :column-visibility="columnVisibility"
           :sorting="sorting"
+          :get-client-name="getClientName"
           @update:page="(v:number)=>page=v"
           @update:page-size="onUpdatePageSize"
           @update:sorting="onUpdateSorting"
           @edit="onEdit"
           @download="onDownload"
+          @delete="onDelete"
           @create="onCreate"
         />
       </div>
@@ -110,17 +112,22 @@
               placeholder="Owner auswählen"
             />
           </n-form-item>
-          <n-form-item path="mandant" label="Mandant">
-            <n-input v-model:value="createForm.mandant" placeholder="z. B. Müller AG" />
+          <n-form-item path="clientId" label="Mandant" required>
+            <n-select
+              v-model:value="createForm.clientId"
+              :options="clientSelectOptions"
+              filterable
+              placeholder="Mandant auswählen *"
+              :loading="clientsLoading"
+            />
           </n-form-item>
         </div>
-        <n-form-item path="template" label="Template">
+        <n-form-item path="template" label="Template" required>
           <n-select
             v-model:value="createForm.template"
             :options="templatesSelectOptions"
             filterable
-            clearable
-            placeholder="Template auswählen (optional)"
+            placeholder="Template auswählen *"
           />
         </n-form-item>
         <n-form-item path="description" label="Beschreibung">
@@ -129,7 +136,14 @@
       </n-form>
       <div class="mt-4 flex items-center justify-end gap-2">
         <n-button quaternary @click="closeCreateModal">Abbrechen</n-button>
-        <n-button type="primary" :loading="createSubmitting" @click="submitCreate">Anlegen</n-button>
+        <n-button 
+          type="primary" 
+          :loading="createSubmitting" 
+          :disabled="!createForm.name || !createForm.status || !createForm.clientId || !createForm.template"
+          @click="submitCreate"
+        >
+          Anlegen
+        </n-button>
       </div>
     </div>
   </n-modal>
@@ -156,12 +170,12 @@ import { computed, inject, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuery } from '@tanstack/vue-query';
 import { useBreakpoints } from '@vueuse/core';
-import { NDrawer, NDrawerContent, NLayout, NLayoutSider, NInput, NModal, NForm, NFormItem, NSelect, NDatePicker, NButton } from 'naive-ui';
+import { NDrawer, NDrawerContent, NLayout, NLayoutSider, NInput, NModal, NForm, NFormItem, NSelect, NDatePicker, NButton, createDiscreteApi } from 'naive-ui';
 import Filters from '@/components/dashboard/Filters.vue';
 import Toolbar from '@/components/dashboard/Toolbar.vue';
 import DocumentsTable from '@/components/dashboard/DocumentsTable.vue';
-import { api } from '@/lib/api';
-import type { DocumentsQueryParams, DocumentItem } from '@/lib/types';
+import { api, clientsApi } from '@/lib/api';
+import type { DocumentsQueryParams, DocumentItem, ClientItem } from '@/lib/types';
 import { useTablePrefsStore } from '@/stores/tablePrefs';
 
 const nMessage = inject<any>('nMessage');
@@ -239,34 +253,36 @@ watch([filters, page, pageSize, sorting], () => {
 const { data: docsData, isLoading, isError, refetch } = useQuery({
   queryKey: computed(() => ['documents', { ...filters, page: page.value, pageSize: pageSize.value, sorting: sorting.value }]),
   queryFn: async () => {
-    // Placeholder: if backend not ready, provide dummy data
-    try {
-      return await api.getDocuments({
-        ...filters,
-        page: page.value,
-        pageSize: pageSize.value,
-        sortBy: sorting.value?.id,
-        sortDir: sorting.value ? (sorting.value.desc ? 'desc' : 'asc') : undefined,
-      });
-    } catch {
-      const items: DocumentItem[] = Array.from({ length: 10 }).map((_, i) => ({
-        id: String(i + 1),
-        modified: new Date(Date.now() - i * 86400000).toISOString(),
-        name: `Beispiel-Dokument ${i + 1}`,
-        status: (['Draft', 'To Be Reviewed', 'In Progress', 'Not Started', 'Finished'] as const)[i % 5],
-        owner: i % 2 ? 'Anna Schmidt' : 'Max Mustermann',
-        mandant: i % 2 ? 'Meyer GmbH' : 'Müller AG',
-        deadline: new Date(Date.now() + (i + 1) * 86400000).toISOString(),
-        template: i % 3 ? 'Standard' : 'Vertrag A',
-      }));
-      return { items, page: page.value, pageSize: pageSize.value, total: 100 };
-    }
+    console.log('[Dashboard] Fetching documents with params:', {
+      ...filters,
+      page: page.value,
+      pageSize: pageSize.value,
+      sortBy: sorting.value?.id,
+      sortDir: sorting.value ? (sorting.value.desc ? 'desc' : 'asc') : undefined,
+    });
+    const result = await api.getDocuments({
+      ...filters,
+      page: page.value,
+      pageSize: pageSize.value,
+      sortBy: sorting.value?.id,
+      sortDir: sorting.value ? (sorting.value.desc ? 'desc' : 'asc') : undefined,
+    });
+    console.log('[Dashboard] Documents loaded:', result?.items?.length || 0, 'total:', result?.total || 0);
+    return result;
   },
   refetchOnWindowFocus: false,
 });
 
-const documents = computed(() => docsData.value?.items ?? []);
-const total = computed(() => docsData.value?.total ?? 0);
+const documents = computed(() => {
+  const items = docsData.value?.items ?? [];
+  console.log('[Dashboard] Computed documents:', items.length, 'items');
+  return items;
+});
+const total = computed(() => {
+  const totalValue = docsData.value?.total ?? 0;
+  console.log('[Dashboard] Computed total:', totalValue);
+  return totalValue;
+});
 
 // Auxiliary data
 const { data: usersData } = useQuery({
@@ -282,6 +298,32 @@ const { data: templatesData } = useQuery({
   refetchOnWindowFocus: false,
 });
 const templates = computed(() => templatesData.value ?? []);
+
+// Clients für Mandantenauswahl laden
+const { data: clientsData, isLoading: clientsLoading } = useQuery({
+  queryKey: ['clients-for-document-creation'],
+  queryFn: () => clientsApi.getClients({ page: 1, pageSize: 1000 }),
+  refetchOnWindowFocus: false,
+});
+const clients = computed(() => clientsData.value?.items || []);
+const clientSelectOptions = computed(() =>
+  clients.value.map((c: ClientItem) => ({
+    label: c.type === 'Natürliche Person'
+      ? `${c.salutation || ''} ${c.firstName || ''} ${c.lastName || ''}`.trim()
+      : c.companyName || 'Unbekannt',
+    value: c.id,
+  }))
+);
+
+// Funktion zum Ermitteln des Client-Namens aus der ID
+function getClientName(clientId: string | undefined): string {
+  if (!clientId) return '—';
+  const client = clients.value.find((c: ClientItem) => c.id === clientId);
+  if (!client) return clientId; // Fallback: ID anzeigen, wenn Client nicht gefunden
+  return client.type === 'Natürliche Person'
+    ? `${client.salutation || ''} ${client.firstName || ''} ${client.lastName || ''}`.trim()
+    : client.companyName || 'Unbekannt';
+}
 
 function onQuery(v: string) {
   filters.query = v;
@@ -317,10 +359,30 @@ function onCreate() {
   showCreateModal.value = true;
 }
 function onEdit(row: DocumentItem) {
-  nMessage?.info(`Dokument bearbeiten: ${row.name}`);
+  console.log('[Dashboard] Edit clicked for document:', row.id, row.name);
+  // Navigate to document editor
+  router.push(`/editor/${row.id}`);
 }
 function onDownload(row: DocumentItem) {
   nMessage?.success(`Download gestartet: ${row.name}`);
+}
+async function onDelete(row: DocumentItem) {
+  const { dialog } = createDiscreteApi(['dialog']);
+  dialog.warning({
+    title: 'Dokument löschen',
+    content: `Möchten Sie das Dokument "${row.name}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+    positiveText: 'Löschen',
+    negativeText: 'Abbrechen',
+    onPositiveClick: async () => {
+      try {
+        await api.deleteDocument(row.id);
+        nMessage?.success('Dokument gelöscht');
+        refetch();
+      } catch (e: any) {
+        nMessage?.error(e.message || 'Fehler beim Löschen');
+      }
+    }
+  });
 }
 function openAIDrawer() {
   showAIDrawer.value = true;
@@ -331,7 +393,7 @@ type CreateForm = {
   name: string;
   status: 'Draft' | 'To Be Reviewed' | 'In Progress' | 'Not Started' | 'Finished' | '';
   owner?: string;
-  mandant?: string;
+  clientId?: string; // Changed from mandant to clientId
   template?: string;
   deadline?: number | null; // timestamp
   description?: string;
@@ -345,12 +407,12 @@ const statusOptions = [
   { label: 'Finished', value: 'Finished' },
 ];
 const usersSelectOptions = computed(() => users.value.map(u => ({ label: u.name, value: u.name })));
-const templatesSelectOptions = computed(() => templates.value.map(t => ({ label: t.name, value: t.name })));
+const templatesSelectOptions = computed(() => templates.value.map(t => ({ label: t.name, value: String(t.id) })));
 const createForm = reactive<CreateForm>({
   name: '',
   status: 'Draft',
   owner: '',
-  mandant: '',
+  clientId: undefined,
   template: '',
   deadline: null,
   description: '',
@@ -358,6 +420,8 @@ const createForm = reactive<CreateForm>({
 const createRules = {
   name: { required: true, message: 'Name ist erforderlich', trigger: 'blur' },
   status: { required: true, message: 'Status ist erforderlich', trigger: 'change' },
+  clientId: { required: true, message: 'Bitte wählen Sie einen Mandanten aus', trigger: ['change', 'blur'] },
+  template: { required: true, message: 'Bitte wählen Sie ein Template aus', trigger: ['change', 'blur'] },
 };
 const createSubmitting = ref(false);
 
@@ -366,15 +430,31 @@ function closeCreateModal() {
 }
 
 async function submitCreate() {
-  await createFormRef.value?.validate();
+  try {
+    await createFormRef.value?.validate();
+  } catch (e) {
+    console.log('[Dashboard] Form validation failed:', e);
+    // Zeige spezifische Fehlermeldungen
+    if (!createForm.clientId) {
+      nMessage?.error('Bitte wählen Sie einen Mandanten aus');
+    }
+    if (!createForm.template) {
+      nMessage?.error('Bitte wählen Sie ein Template aus');
+    }
+    return;
+  }
+  
   createSubmitting.value = true;
   try {
-    await api.createDocument({
+    const createdClientId = createForm.clientId; // Speichere clientId vor dem Reset
+    const createdTemplate = createForm.template; // Speichere template vor dem Reset
+    
+    const result = await api.createDocument({
       title: createForm.name.trim(),
       status: 'draft', // Backend verwendet lowercase
       document_type: createForm.template || undefined,
       content: createForm.description || '',
-      // Bei Bedarf zusätzlich client_id / tax_advisor_id senden
+      client_id: createForm.clientId ? Number(createForm.clientId) : undefined,
     } as any);
     nMessage?.success('Dokument erstellt');
     closeCreateModal();
@@ -382,13 +462,26 @@ async function submitCreate() {
     createForm.name = '';
     createForm.status = 'Draft';
     createForm.owner = '';
-    createForm.mandant = '';
+    createForm.clientId = undefined;
     createForm.template = '';
     createForm.deadline = null;
     createForm.description = '';
     refetch();
+    
+    // Navigiere zum Editor mit dem erstellten Dokument und clientId
+    if (result && result.id && createdTemplate) {
+      router.push({
+        path: `/editor/${createdTemplate}`,
+        query: {
+          documentId: String(result.id),
+          mode: 'document',
+          ...(createdClientId ? { clientId: String(createdClientId) } : {}),
+          templateId: String(createdTemplate),
+        },
+      });
+    }
   } catch (e:any) {
-    nMessage?.error('Erstellen fehlgeschlagen');
+    nMessage?.error(e.message || 'Erstellen fehlgeschlagen');
   } finally {
     createSubmitting.value = false;
   }

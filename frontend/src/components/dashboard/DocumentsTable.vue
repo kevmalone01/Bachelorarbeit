@@ -77,7 +77,7 @@
                 {{ row.owner }}
               </template>
               <template v-else-if="col.id === 'mandant'">
-                {{ row.mandant || '—' }}
+                {{ getClientName ? getClientName(row.mandant) : (row.mandant || '—') }}
               </template>
               <template v-else-if="col.id === 'deadline'">
                 {{ row.deadline ? formatDate(row.deadline) : '—' }}
@@ -86,6 +86,7 @@
                 <div class="flex gap-2">
                   <n-button size="small" @click="$emit('edit', row)"><Pencil class="w-3.5 h-3.5 mr-1" /> Edit</n-button>
                   <n-button size="small" @click="$emit('download', row)"><Download class="w-3.5 h-3.5 mr-1" /> Download</n-button>
+                  <n-button size="small" type="error" @click="$emit('delete', row)"><Trash2 class="w-3.5 h-3.5 mr-1" /> Löschen</n-button>
                 </div>
               </template>
             </td>
@@ -118,7 +119,7 @@
 import { computed, reactive, ref, onMounted, onUnmounted } from 'vue';
 import { NBadge, NButton } from 'naive-ui';
 import type { DocumentItem } from '@/lib/types';
-import { ArrowUpDown, Pencil, Download, GripVertical } from 'lucide-vue-next';
+import { ArrowUpDown, Pencil, Download, GripVertical, Trash2 } from 'lucide-vue-next';
 import { useTablePrefsStore } from '@/stores/tablePrefs';
 
 const props = defineProps<{
@@ -130,6 +131,7 @@ const props = defineProps<{
   total: number;
   columnVisibility: Record<string, boolean>;
   sorting: { id: string; desc: boolean } | null;
+  getClientName?: (clientId: string | undefined) => string;
 }>();
 const emit = defineEmits<{
   (e: 'update:page', v: number): void;
@@ -137,6 +139,7 @@ const emit = defineEmits<{
   (e: 'update:sorting', v: { id: string; desc: boolean } | null): void;
   (e: 'edit', row: DocumentItem): void;
   (e: 'download', row: DocumentItem): void;
+  (e: 'delete', row: DocumentItem): void;
   (e: 'create'): void;
 }>();
 

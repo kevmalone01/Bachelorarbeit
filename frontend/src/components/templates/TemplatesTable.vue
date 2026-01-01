@@ -90,6 +90,9 @@
                   <n-button size="small" @click="$emit('download', row)">
                     <Download class="w-3.5 h-3.5 mr-1" /> Download
                   </n-button>
+                  <n-button size="small" type="error" @click="$emit('delete', row)">
+                    <Trash2 class="w-3.5 h-3.5 mr-1" /> Löschen
+                  </n-button>
                 </div>
               </template>
             </td>
@@ -147,7 +150,7 @@
 import { computed, reactive, ref, onUnmounted } from 'vue';
 import { NBadge, NButton, NCard, NModal, NTag } from 'naive-ui';
 import type { TemplateItem } from '@/lib/types';
-import { ArrowUpDown, GripVertical, Pencil, Download } from 'lucide-vue-next';
+import { ArrowUpDown, GripVertical, Pencil, Download, Trash2 } from 'lucide-vue-next';
 import { useTablePrefsStore } from '@/stores/tablePrefs';
 
 const props = defineProps<{
@@ -167,6 +170,7 @@ const emit = defineEmits<{
   (e: 'update:sorting', v: { id: string; desc: boolean } | null): void;
   (e: 'create'): void;
   (e: 'edit', row: TemplateItem): void;
+  (e: 'delete', row: TemplateItem): void;
   (e: 'download', row: TemplateItem): void;
   (e: 'update:selected-ids', v: Set<string>): void;
 }>();

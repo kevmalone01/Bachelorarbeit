@@ -8,7 +8,19 @@
           Zurück zur Übersicht
         </n-button>
         <div class="flex-1"></div>
-        <n-button type="error" @click="handleDelete">
+        <n-button v-if="!isEditing" type="primary" @click="startEdit">
+          <Edit class="w-4 h-4 mr-2" />
+          Bearbeiten
+        </n-button>
+        <template v-else>
+          <n-button @click="cancelEdit">
+            Abbrechen
+          </n-button>
+          <n-button type="primary" :loading="isSaving" @click="saveChanges">
+            Speichern
+          </n-button>
+        </template>
+        <n-button type="error" @click="handleDelete" :disabled="isEditing">
           <Trash2 class="w-4 h-4 mr-2" />
           Löschen
         </n-button>
@@ -43,11 +55,13 @@
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Mandatsmanager</label>
-              <p class="mt-1 text-gray-900">{{ client.mandateManager || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.mandateManager" placeholder="Mandatsmanager" />
+              <p v-else class="mt-1 text-gray-900">{{ client.mandateManager || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Mandatsverantwortlicher</label>
-              <p class="mt-1 text-gray-900">{{ client.mandateResponsible || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.mandateResponsible" placeholder="Mandatsverantwortlicher" />
+              <p v-else class="mt-1 text-gray-900">{{ client.mandateResponsible || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Erstellt am</label>
@@ -65,23 +79,38 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label class="text-sm font-medium text-gray-600">Anrede</label>
-              <p class="mt-1 text-gray-900">{{ client.salutation || '-' }}</p>
+              <n-select v-if="isEditing" v-model:value="editableClient.salutation" :options="salutationOptions" clearable placeholder="Anrede" />
+              <p v-else class="mt-1 text-gray-900">{{ client.salutation || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Titel</label>
-              <p class="mt-1 text-gray-900">{{ client.title || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.title" placeholder="z.B. Dr., Prof." />
+              <p v-else class="mt-1 text-gray-900">{{ client.title || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Vorname</label>
-              <p class="mt-1 text-gray-900 font-semibold">{{ client.firstName || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.firstName" placeholder="Vorname" />
+              <p v-else class="mt-1 text-gray-900 font-semibold">{{ client.firstName || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Nachname</label>
-              <p class="mt-1 text-gray-900 font-semibold">{{ client.lastName || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.lastName" placeholder="Nachname" />
+              <p v-else class="mt-1 text-gray-900 font-semibold">{{ client.lastName || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Geburtsdatum</label>
-              <p class="mt-1 text-gray-900">{{ formatDate(client.birthDate) }}</p>
+              <n-date-picker v-if="isEditing" v-model:value="editableClient.birthDate" type="date" value-format="yyyy-MM-dd" placeholder="Geburtsdatum" />
+              <p v-else class="mt-1 text-gray-900">{{ formatDate(client.birthDate) }}</p>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-gray-600">Geburtsort</label>
+              <n-input v-if="isEditing" v-model:value="editableClient.birthPlace" placeholder="Geburtsort" />
+              <p v-else class="mt-1 text-gray-900">{{ client.birthPlace || '-' }}</p>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-gray-600">Staatsangehörigkeit</label>
+              <n-input v-if="isEditing" v-model:value="editableClient.nationality" placeholder="z.B. Deutsch" />
+              <p v-else class="mt-1 text-gray-900">{{ client.nationality || '-' }}</p>
             </div>
           </div>
         </n-card>
@@ -91,11 +120,13 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label class="text-sm font-medium text-gray-600">Firma</label>
-              <p class="mt-1 text-gray-900 font-semibold text-lg">{{ client.companyName || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.companyName" placeholder="Firmenname" />
+              <p v-else class="mt-1 text-gray-900 font-semibold text-lg">{{ client.companyName || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Rechtsform</label>
-              <div class="mt-1">
+              <n-select v-if="isEditing" v-model:value="editableClient.legalForm" :options="legalFormOptions" placeholder="Rechtsform auswählen" />
+              <div v-else class="mt-1">
                 <n-tag size="medium" v-if="client.legalForm">{{ client.legalForm }}</n-tag>
                 <span v-else class="text-gray-500">-</span>
               </div>
@@ -108,19 +139,23 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label class="text-sm font-medium text-gray-600">Straße</label>
-              <p class="mt-1 text-gray-900">{{ client.street || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.street" placeholder="Straße" />
+              <p v-else class="mt-1 text-gray-900">{{ client.street || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Nr.</label>
-              <p class="mt-1 text-gray-900">{{ client.number || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.number" placeholder="Hausnummer" />
+              <p v-else class="mt-1 text-gray-900">{{ client.number || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">PLZ</label>
-              <p class="mt-1 text-gray-900">{{ client.zip || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.zip" placeholder="PLZ" />
+              <p v-else class="mt-1 text-gray-900">{{ client.zip || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Ort</label>
-              <p class="mt-1 text-gray-900">{{ client.city || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.city" placeholder="Ort" />
+              <p v-else class="mt-1 text-gray-900">{{ client.city || '-' }}</p>
             </div>
           </div>
         </n-card>
@@ -130,65 +165,79 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label class="text-sm font-medium text-gray-600">E-Mail</label>
-              <p class="mt-1 text-gray-900">{{ client.email || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.email" type="email" placeholder="email@example.com" />
+              <p v-else class="mt-1 text-gray-900">{{ client.email || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Steuernummer</label>
-              <p class="mt-1 text-gray-900">{{ client.taxNumber || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.taxNumber" placeholder="Steuernummer" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxNumber || '-' }}</p>
             </div>
             <div v-if="client.type === 'Natürliche Person'">
               <label class="text-sm font-medium text-gray-600">Steuer-ID</label>
-              <p class="mt-1 text-gray-900">{{ client.taxId || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.taxId" placeholder="Steuer-ID" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxId || '-' }}</p>
             </div>
             <div v-if="client.type === 'Gewerbe'">
               <label class="text-sm font-medium text-gray-600">UST-ID</label>
-              <p class="mt-1 text-gray-900">{{ client.vatId || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.vatId" placeholder="UST-ID" />
+              <p v-else class="mt-1 text-gray-900">{{ client.vatId || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Finanzgericht</label>
-              <p class="mt-1 text-gray-900">{{ client.taxCourt || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.taxCourt" placeholder="Finanzgericht" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxCourt || '-' }}</p>
             </div>
           </div>
         </n-card>
 
         <!-- Finanzamt -->
-        <n-card v-if="client.taxOffice" title="Finanzamt" class="shadow-sm">
+        <n-card v-if="client.taxOffice || isEditing" title="Finanzamt" class="shadow-sm">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label class="text-sm font-medium text-gray-600">PLZ</label>
-              <p class="mt-1 text-gray-900">{{ client.taxOffice.zip || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.taxOfficeZip" placeholder="PLZ" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxOffice?.zip || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Ort</label>
-              <p class="mt-1 text-gray-900">{{ client.taxOffice.city || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.taxOfficeCity" placeholder="Ort" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxOffice?.city || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Straße</label>
-              <p class="mt-1 text-gray-900">{{ client.taxOffice.street || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.taxOfficeStreet" placeholder="Straße" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxOffice?.street || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Nr.</label>
-              <p class="mt-1 text-gray-900">{{ client.taxOffice.number || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.taxOfficeNumber" placeholder="Hausnummer" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxOffice?.number || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">E-Mail</label>
-              <p class="mt-1 text-gray-900">{{ client.taxOffice.email || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.taxOfficeEmail" type="email" placeholder="email@example.com" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxOffice?.email || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Fax</label>
-              <p class="mt-1 text-gray-900">{{ client.taxOffice.fax || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.taxOfficeFax" placeholder="Fax" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxOffice?.fax || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Anrede Ansprechpartner</label>
-              <p class="mt-1 text-gray-900">{{ client.taxOffice.contactSalutation || '-' }}</p>
+              <n-select v-if="isEditing" v-model:value="editableClient.taxOfficeContactSalutation" :options="salutationOptions" clearable placeholder="Anrede" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxOffice?.contactSalutation || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Nachname Ansprechpartner</label>
-              <p class="mt-1 text-gray-900">{{ client.taxOffice.contactLastName || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.taxOfficeContactLastName" placeholder="Nachname" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxOffice?.contactLastName || '-' }}</p>
             </div>
             <div>
               <label class="text-sm font-medium text-gray-600">Telefon Ansprechpartner</label>
-              <p class="mt-1 text-gray-900">{{ client.taxOffice.contactPhone || '-' }}</p>
+              <n-input v-if="isEditing" v-model:value="editableClient.taxOfficeContactPhone" placeholder="Telefon" />
+              <p v-else class="mt-1 text-gray-900">{{ client.taxOffice?.contactPhone || '-' }}</p>
             </div>
           </div>
         </n-card>
@@ -224,11 +273,11 @@
 /**
  * ClientDetail - Detailansicht für einen einzelnen Mandanten mit allen Feldern.
  */
-import { computed, inject } from 'vue';
+import { computed, inject, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
-import { NButton, NCard, NTag, NSpin, NAlert, createDiscreteApi } from 'naive-ui';
-import { ArrowLeft, Trash2 } from 'lucide-vue-next';
+import { NButton, NCard, NTag, NSpin, NAlert, NInput, NSelect, NDatePicker, createDiscreteApi } from 'naive-ui';
+import { ArrowLeft, Trash2, Edit } from 'lucide-vue-next';
 import { clientsApi } from '@/lib/api';
 import type { ClientItem } from '@/lib/types';
 
@@ -245,6 +294,98 @@ const { data: client, isLoading, isError } = useQuery({
   queryFn: () => clientsApi.getClient(clientId.value),
   enabled: !!clientId.value
 });
+
+// Bearbeitungsmodus
+const isEditing = ref(false);
+const isSaving = ref(false);
+const editableClient = ref<Partial<ClientItem> | null>(null);
+
+// Optionen für Selects
+const salutationOptions = [
+  { label: 'Herr', value: 'Herr' },
+  { label: 'Frau', value: 'Frau' },
+  { label: 'Divers', value: 'Divers' }
+];
+
+const legalFormOptions = [
+  { label: 'Gesellschaft mit beschränkter Haftung (GmbH)', value: 'Gesellschaft mit beschränkter Haftung (GmbH)' },
+  { label: 'Aktiengesellschaft (AG)', value: 'Aktiengesellschaft (AG)' },
+  { label: 'Offene Handelsgesellschaft (OHG)', value: 'Offene Handelsgesellschaft (OHG)' },
+  { label: 'Unternehmergesellschaft (UG)', value: 'Unternehmergesellschaft (UG)' },
+  { label: 'Kommanditgesellschaft (KG)', value: 'Kommanditgesellschaft (KG)' },
+  { label: 'Gesellschaft bürgerlichen Rechts (GbR)', value: 'Gesellschaft bürgerlichen Rechts (GbR)' },
+  { label: 'Einzelunternehmen', value: 'Einzelunternehmen' }
+];
+
+function startEdit() {
+  if (client.value) {
+    editableClient.value = { 
+      ...client.value,
+      // Ensure salutation is always included, even if null/undefined
+      salutation: client.value.salutation || null,
+      // Ensure birthPlace and nationality are included
+      birthPlace: client.value.birthPlace || '',
+      nationality: client.value.nationality || '',
+      // Map taxOffice fields to flat structure for editing
+      taxOfficeZip: client.value.taxOffice?.zip || '',
+      taxOfficeCity: client.value.taxOffice?.city || '',
+      taxOfficeStreet: client.value.taxOffice?.street || '',
+      taxOfficeNumber: client.value.taxOffice?.number || '',
+      taxOfficeEmail: client.value.taxOffice?.email || '',
+      taxOfficeFax: client.value.taxOffice?.fax || '',
+      taxOfficeContactSalutation: client.value.taxOffice?.contactSalutation || '',
+      taxOfficeContactLastName: client.value.taxOffice?.contactLastName || '',
+      taxOfficeContactPhone: client.value.taxOffice?.contactPhone || '',
+    };
+    console.log('[ClientDetail] Started editing, editableClient:', editableClient.value);
+    isEditing.value = true;
+  }
+}
+
+function cancelEdit() {
+  editableClient.value = null;
+  isEditing.value = false;
+}
+
+// Update mutation
+const updateMutation = useMutation({
+  mutationFn: (data: Partial<ClientItem>) => clientsApi.updateClient(clientId.value, data),
+  onSuccess: (response) => {
+    console.log('[ClientDetail] Update response:', response);
+    console.log('[ClientDetail] Salutation in response:', response?.salutation);
+    message.success('Mandantendaten erfolgreich aktualisiert');
+    queryClient.invalidateQueries({ queryKey: ['client', clientId.value] });
+    queryClient.invalidateQueries({ queryKey: ['clients'] });
+    isEditing.value = false;
+    editableClient.value = null;
+  },
+  onError: (error) => {
+    console.error('[ClientDetail] Update error:', error);
+    message.error('Fehler beim Aktualisieren der Mandantendaten');
+  }
+});
+
+async function saveChanges() {
+  if (!editableClient.value || !client.value) return;
+  
+  isSaving.value = true;
+  try {
+    // Ensure type is included in the payload
+    const payload = {
+      ...editableClient.value,
+      type: client.value.type, // Always include the client type
+      // Explicitly include birthPlace and nationality to ensure they're sent
+      birthPlace: editableClient.value.birthPlace || '',
+      nationality: editableClient.value.nationality || '',
+    };
+    console.log('[ClientDetail] Saving changes with payload:', payload);
+    console.log('[ClientDetail] birthPlace in payload:', payload.birthPlace);
+    console.log('[ClientDetail] nationality in payload:', payload.nationality);
+    await updateMutation.mutateAsync(payload);
+  } finally {
+    isSaving.value = false;
+  }
+}
 
 // Löschen
 const deleteMutation = useMutation({

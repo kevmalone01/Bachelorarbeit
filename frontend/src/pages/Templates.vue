@@ -54,6 +54,7 @@
           @create="openCreate"
           @edit="onEdit"
           @download="onDownload"
+          @delete="onDelete"
         />
       </div>
     </n-layout>
@@ -128,7 +129,7 @@
 import { computed, inject, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
-import { useBreakpoints } from '@vueuse/core';
+import { useBreakpoints, useDebounceFn } from '@vueuse/core';
 import { NDrawer, NDrawerContent, NLayout, NLayoutSider, NButton, NCard, NForm, NFormItem, NInput, NModal, NSelect, NUpload, NUploadDragger, createDiscreteApi } from 'naive-ui';
 import TemplateFilters from '@/components/templates/Filters.vue';
 import TemplateToolbar from '@/components/templates/Toolbar.vue';
@@ -152,11 +153,11 @@ const selectedIds = ref<Set<string>>(new Set());
 const breakpoints = useBreakpoints({ lg: 1024 });
 const isDesktop = breakpoints.greaterOrEqual('lg');
 
-// Filters from URL
+// Filters from URL - ensure arrays are empty if not set
 const filters = reactive<TemplatesQueryParams>({
   query: (route.query.query as string) || '',
-  creator: ([] as string[]).concat(route.query.creator as any || []),
-  type: ([] as string[]).concat(route.query.type as any || []),
+  creator: route.query.creator ? ([] as string[]).concat(route.query.creator as any) : [],
+  type: route.query.type ? ([] as string[]).concat(route.query.type as any) : [],
   createdAtFrom: (route.query.createdAtFrom as string) || undefined,
   createdAtTo: (route.query.createdAtTo as string) || undefined,
   page: Number(route.query.page || 1),
@@ -176,8 +177,13 @@ const page = ref(filters.page || 1);
 const pageSize = ref(filters.pageSize || prefs.pageSize || 20);
 const sorting = ref<{ id: string; desc: boolean } | null>(filters.sortBy ? { id: filters.sortBy!, desc: filters.sortDir === 'desc' } : null);
 
-// Sync URL
-watch([filters, page, pageSize, sorting], () => {
+// Flag to prevent infinite loops when syncing URL
+const isUpdatingURL = ref(false);
+
+// Sync URL - use debounce to avoid too frequent updates
+const updateURL = useDebounceFn(() => {
+  if (isUpdatingURL.value) return;
+  
   const q: any = {
     query: filters.query,
     creator: filters.creator,
@@ -190,24 +196,135 @@ watch([filters, page, pageSize, sorting], () => {
     sortDir: sorting.value ? (sorting.value.desc ? 'desc' : 'asc') : undefined,
   };
   Object.keys(q).forEach((k) => (q[k] === undefined || q[k] === '' || (Array.isArray(q[k]) && q[k].length === 0)) && delete q[k]);
-  router.replace({ query: q });
-}, { deep: true });
+  
+  // Check if URL actually changed to avoid unnecessary updates
+  const currentQuery = route.query;
+  const hasChanged = JSON.stringify(q) !== JSON.stringify(currentQuery);
+  if (hasChanged) {
+    isUpdatingURL.value = true;
+    router.replace({ query: q }).finally(() => {
+      isUpdatingURL.value = false;
+    });
+  }
+}, 300);
 
-// Data
-const { data, isLoading, isError, refetch } = useQuery({
-  queryKey: computed(() => ['templates', { ...filters, page: page.value, pageSize: pageSize.value, sorting: sorting.value }]),
-  queryFn: () => templatesApi.getTemplates({
-    ...filters,
+// Watch filters changes separately to avoid deep watching issues
+// Only update URL if not already updating (to prevent loops)
+// Use { immediate: false } to prevent triggering on initial mount
+watch(() => filters.query, () => {
+  if (!isUpdatingURL.value) updateURL();
+}, { immediate: false });
+watch(() => filters.creator, () => {
+  if (!isUpdatingURL.value) updateURL();
+}, { deep: true, immediate: false });
+watch(() => filters.type, () => {
+  if (!isUpdatingURL.value) updateURL();
+}, { deep: true, immediate: false });
+watch(() => filters.createdAtFrom, () => {
+  if (!isUpdatingURL.value) updateURL();
+}, { immediate: false });
+watch(() => filters.createdAtTo, () => {
+  if (!isUpdatingURL.value) updateURL();
+}, { immediate: false });
+watch(page, () => {
+  if (!isUpdatingURL.value) updateURL();
+}, { immediate: false });
+watch(pageSize, () => {
+  if (!isUpdatingURL.value) updateURL();
+}, { immediate: false });
+watch(sorting, () => {
+  if (!isUpdatingURL.value) updateURL();
+}, { deep: true, immediate: false });
+
+// Create a stable query key function that only changes when values actually change
+const getQueryKey = () => {
+  const params = {
+    query: filters.query || '',
+    creator: Array.isArray(filters.creator) ? filters.creator.join(',') : '',
+    type: Array.isArray(filters.type) ? filters.type.join(',') : '',
+    createdAtFrom: filters.createdAtFrom || '',
+    createdAtTo: filters.createdAtTo || '',
     page: page.value,
     pageSize: pageSize.value,
-    sortBy: sorting.value?.id,
-    sortDir: sorting.value ? (sorting.value.desc ? 'desc' : 'asc') : undefined,
-  }),
-  keepPreviousData: true
+    sortBy: sorting.value?.id || '',
+    sortDir: sorting.value?.desc ? 'desc' : 'asc',
+  };
+  // Create a stable string key
+  const keyStr = `${params.query}|${params.creator}|${params.type}|${params.createdAtFrom}|${params.createdAtTo}|${params.page}|${params.pageSize}|${params.sortBy}|${params.sortDir}`;
+  return ['templates', keyStr];
+};
+
+// Data - use a stable query key that only changes when actual filter values change
+const { data, isLoading, isError, error, refetch } = useQuery({
+  queryKey: getQueryKey,
+  queryFn: async () => {
+    // Only pass filter params if they have actual values
+    const params: any = {
+      query: filters.query || '',
+      page: page.value,
+      pageSize: pageSize.value,
+      sortBy: sorting.value?.id,
+      sortDir: sorting.value ? (sorting.value.desc ? 'desc' : 'asc') : undefined,
+    };
+    
+    // Only add creator filter if it has valid values
+    if (filters.creator && Array.isArray(filters.creator) && filters.creator.length > 0) {
+      const validCreators = filters.creator.filter(c => c && c.trim() !== '');
+      if (validCreators.length > 0) {
+        params.creator = validCreators;
+      }
+    }
+    
+    // Only add type filter if it has valid values
+    if (filters.type && Array.isArray(filters.type) && filters.type.length > 0) {
+      const validTypes = filters.type.filter(t => t && t.trim() !== '');
+      if (validTypes.length > 0) {
+        params.type = validTypes;
+      }
+    }
+    
+    // Only add date filters if they have values
+    if (filters.createdAtFrom) {
+      params.createdAtFrom = filters.createdAtFrom;
+    }
+    if (filters.createdAtTo) {
+      params.createdAtTo = filters.createdAtTo;
+    }
+    
+    console.log('[Templates Query] Fetching templates with params:', params);
+    const result = await templatesApi.getTemplates(params);
+    console.log('[Templates Query] Received result:', result.items.length, 'items');
+    return result;
+  },
+  keepPreviousData: true,
+  retry: 1, // Only retry once on failure
+  retryDelay: 1000, // Fixed delay
+  retryOnMount: false, // Don't retry on mount - use cached data if available
+  staleTime: Infinity, // Daten sind nie "stale" - nur manuell refetchen
+  cacheTime: 10 * 60 * 1000, // Cache für 10 Minuten behalten
+  refetchOnWindowFocus: false, // Nicht automatisch neu laden beim Fokus
+  refetchOnMount: false, // Don't refetch on mount - use cached data
+  refetchOnReconnect: false, // Don't refetch on reconnect
+  refetchInterval: false, // Don't auto-refetch
 });
 
-const templates = computed<TemplateItem[]>(() => data.value?.items ?? []);
-const total = computed<number>(() => data.value?.total ?? 0);
+const templates = computed<TemplateItem[]>(() => {
+  if (!data.value) {
+    console.log('[Templates] Computed - data.value is null/undefined');
+    return [];
+  }
+  const items = data.value.items || [];
+  console.log('[Templates] Computed templates count:', items.length, 'isLoading:', isLoading.value, 'isError:', isError.value, 'data:', data.value);
+  return items;
+});
+const total = computed<number>(() => {
+  if (!data.value) {
+    return 0;
+  }
+  const totalValue = data.value.total ?? 0;
+  console.log('[Templates] Computed total:', totalValue);
+  return totalValue;
+});
 
 // Auxiliary data
 const { data: creatorsData } = useQuery({
@@ -239,7 +356,20 @@ function onUpdateSorting(v: { id: string; desc: boolean } | null) {
   sorting.value = v;
 }
 function applyFilters(f: TemplatesQueryParams) {
-  Object.assign(filters, f);
+  // Nur die übergebenen Filter setzen, andere auf Standard zurücksetzen
+  if (f.query !== undefined) filters.query = f.query;
+  if (f.creator !== undefined) {
+    filters.creator = Array.isArray(f.creator) && f.creator.length > 0 ? [...f.creator] : [];
+  } else {
+    filters.creator = [];
+  }
+  if (f.type !== undefined) {
+    filters.type = Array.isArray(f.type) && f.type.length > 0 ? [...f.type] : [];
+  } else {
+    filters.type = [];
+  }
+  if (f.createdAtFrom !== undefined) filters.createdAtFrom = f.createdAtFrom;
+  if (f.createdAtTo !== undefined) filters.createdAtTo = f.createdAtTo;
   page.value = 1;
   refetch();
 }
@@ -259,8 +389,8 @@ function openCreate() {
 }
 
 function onEdit(item: TemplateItem) {
-  nMessage?.info(`Vorlage bearbeiten: ${item.title}`);
-  // TODO: Öffne Edit-Modal oder navigiere zu Edit-Seite
+  // Navigiere zum Editor mit der Vorlage
+  router.push(`/editor/${item.id}`);
 }
 
 function onDownload(item: TemplateItem) {
@@ -269,6 +399,24 @@ function onDownload(item: TemplateItem) {
   } else {
     nMessage?.warning('Keine Datei verfügbar');
   }
+}
+async function onDelete(item: TemplateItem) {
+  const { dialog } = createDiscreteApi(['dialog']);
+  dialog.warning({
+    title: 'Vorlage löschen',
+    content: `Möchten Sie die Vorlage "${item.title}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+    positiveText: 'Löschen',
+    negativeText: 'Abbrechen',
+    onPositiveClick: async () => {
+      try {
+        await templatesApi.deleteTemplate(item.id);
+        nMessage?.success('Vorlage gelöscht');
+        queryClient.invalidateQueries({ queryKey: ['templates'] });
+      } catch (e: any) {
+        nMessage?.error(e.message || 'Fehler beim Löschen');
+      }
+    }
+  });
 }
 
 // Create Template flow
@@ -319,21 +467,31 @@ async function submitCreate() {
     return;
   }
 
+  if (!selectedFile.value) {
+    nMessage?.error('Bitte wählen Sie eine Datei aus');
+    return;
+  }
+
   createSubmitting.value = true;
   try {
     const creatorName = creators.value.find(c => c.id === createForm.creator)?.name || '';
-    await templatesApi.createTemplate({
+    const result = await templatesApi.createTemplate({
       title: createForm.title.trim(),
       note: createForm.note.trim() || undefined,
       type: createForm.type as any,
       creator: creatorName,
-      file: selectedFile.value || undefined,
+      file: selectedFile.value,
     });
     nMessage?.success('Vorlage erstellt');
     closeCreateModal();
-    refetch();
+    // Invalidate queries to refresh the list
+    queryClient.invalidateQueries({ queryKey: ['templates'] });
+    // Öffne den Editor mit der neuen Vorlage
+    if (result.id) {
+      router.push(`/editor/${result.id}`);
+    }
   } catch (e: any) {
-    nMessage?.error('Erstellen fehlgeschlagen');
+    nMessage?.error(e.message || 'Erstellen fehlgeschlagen');
   } finally {
     createSubmitting.value = false;
   }

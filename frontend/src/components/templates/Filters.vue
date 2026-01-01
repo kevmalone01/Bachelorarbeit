@@ -52,19 +52,19 @@ const emit = defineEmits<{ (e:'apply', v:any):void; (e:'reset'):void }>();
 const local = reactive({ 
   type: props.selected.type && props.selected.type.length > 0 
     ? [...props.selected.type] 
-    : [...props.types] as string[] 
+    : [] as string[] // Standardmäßig KEINE Typen ausgewählt
 });
 
 const checkedCreators = reactive<Record<string, boolean>>({});
 const dateRange = ref<[number, number] | null>(null);
 
-// Initialisiere Ersteller: Standardmäßig alle ausgewählt
+// Initialisiere Ersteller: Standardmäßig KEINE ausgewählt
 function initializeCreators() {
   props.creators.forEach(c => {
     if (props.selected.creator && props.selected.creator.length > 0) {
       checkedCreators[c.name] = props.selected.creator.includes(c.name);
     } else {
-      checkedCreators[c.name] = true; // Standardmäßig ausgewählt
+      checkedCreators[c.name] = false; // Standardmäßig NICHT ausgewählt
     }
   });
 }
@@ -85,7 +85,7 @@ function initializeDate() {
 watch(() => props.selected, () => {
   local.type = props.selected.type && props.selected.type.length > 0 
     ? [...props.selected.type] 
-    : [...props.types];
+    : []; // Standardmäßig KEINE Typen ausgewählt
   initializeCreators();
   initializeDate();
 }, { deep: true });
@@ -102,7 +102,22 @@ const emitFilters = useDebounceFn(() => {
     createdAtTo = new Date(dateRange.value[1]).toISOString().split('T')[0];
   }
   
-  emit('apply', { creator, type, createdAtFrom, createdAtTo });
+  // Nur Filter anwenden, wenn tatsächlich Werte ausgewählt sind
+  const filters: any = {};
+  if (creator.length > 0) {
+    filters.creator = creator;
+  }
+  if (type.length > 0) {
+    filters.type = type;
+  }
+  if (createdAtFrom) {
+    filters.createdAtFrom = createdAtFrom;
+  }
+  if (createdAtTo) {
+    filters.createdAtTo = createdAtTo;
+  }
+  
+  emit('apply', filters);
 }, 300);
 
 // Watch für automatische Filteranwendung bei Änderungen
@@ -122,9 +137,15 @@ watch(dateRange, () => {
 onMounted(() => {
   initializeCreators();
   initializeDate();
-  setTimeout(() => {
-    emitFilters();
-  }, 200);
+  // NICHT automatisch Filter anwenden beim Mounten
+  // Nur anwenden, wenn tatsächlich Werte in props.selected vorhanden sind
+  if ((props.selected.creator && props.selected.creator.length > 0) ||
+      (props.selected.type && props.selected.type.length > 0) ||
+      props.selected.createdAtFrom || props.selected.createdAtTo) {
+    setTimeout(() => {
+      emitFilters();
+    }, 200);
+  }
 });
 
 function reset() {

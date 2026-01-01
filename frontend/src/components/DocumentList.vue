@@ -250,51 +250,11 @@ const fetchDocuments = async () => {
     
     try {
         const response = await DocumentAPI.getTemplates();
-        documents.value = response.data;
+        documents.value = response.data || [];
     } catch (err: any) {
         console.error('Error fetching documents:', err);
         error.value = 'Fehler beim Laden der Dokumente: ' + (err.response?.data?.error || err.message || 'Unbekannter Fehler');
-        
-        // Fallback - показываем mock данные если API не работает
-        documents.value = [
-            {
-                id: 1,
-                name: 'Arbeitsvertrag',
-                description: 'Standard Arbeitsvertrag Vorlage',
-                file_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                created_at: '2023-05-15T10:30:00Z',
-                placeholders: [
-                    { name: 'arbeitgeber', type: 'text' },
-                    { name: 'arbeitnehmer', type: 'text' },
-                    { name: 'beginn', type: 'date' }
-                ]
-            },
-            {
-                id: 2,
-                name: 'Kündigung',
-                description: 'Vorlage für Kündigungsschreiben',
-                file_type: 'application/pdf',
-                created_at: '2023-06-20T14:15:00Z',
-                placeholders: [
-                    { name: 'name', type: 'text' },
-                    { name: 'anschrift', type: 'text' },
-                    { name: 'kuendigungsdatum', type: 'date' }
-                ]
-            },
-            {
-                id: 3,
-                name: 'Rechnung',
-                description: 'Standardvorlage für Rechnungen',
-                file_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                created_at: '2023-07-05T09:45:00Z',
-                placeholders: [
-                    { name: 'kunde', type: 'text' },
-                    { name: 'betrag', type: 'number' },
-                    { name: 'datum', type: 'date' },
-                    { name: 'leistungsbeschreibung', type: 'textarea' }
-                ]
-            }
-        ];
+        documents.value = [];
     } finally {
         isLoading.value = false;
     }

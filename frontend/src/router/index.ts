@@ -6,6 +6,7 @@ import ClientCreationView from '../views/ClientCreationView.vue'
 import Clients from '@/pages/Clients.vue'
 import ClientDetail from '@/pages/ClientDetail.vue'
 import Templates from '@/pages/Templates.vue'
+import DocumentEditor from '@/pages/DocumentEditor.vue'
 import DocumentCreationView from '../views/DocumentCreationView.vue'
 import DocumentFillingView from '../views/DocumentFillingView.vue'
 import WorkflowDetailView from '../views/WorkflowDetailView.vue'
@@ -77,9 +78,21 @@ const router = createRouter({
             meta: { requiresAuth: true },
         },
         {
+            path: '/editor/:id',
+            name: 'document-editor',
+            component: DocumentEditor,
+            meta: { requiresAuth: true },
+        },
+        {
             path: '/document-creation',
             name: 'document-creation',
             component: DocumentCreationView,
+            meta: { requiresAuth: true },
+        },
+        {
+            path: '/document-from-template',
+            name: 'document-from-template',
+            component: () => import('../views/DocumentFromTemplateView.vue'),
             meta: { requiresAuth: true },
         },
         {

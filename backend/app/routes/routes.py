@@ -68,6 +68,7 @@ def upload_document():
         # Get document metadata
         name = request.form.get('name', file.filename)
         description = request.form.get('description', '')
+        is_template = request.form.get('is_template', 'false').lower() == 'true'  # Check if this should be saved as template
         
         # Save file
         file_path = document_service.save_document(file, file.filename)
@@ -84,13 +85,26 @@ def upload_document():
                 logger.error("Invalid placeholders JSON")
                 return jsonify({'error': 'Invalid placeholders JSON'}), 400
         
+        # Process linked client group IDs if provided
+        linked_client_group_ids = []
+        if 'linkedClientGroupIds' in request.form:
+            import json
+            try:
+                linked_client_group_ids = json.loads(request.form['linkedClientGroupIds'])
+                logger.debug("Received linked client group IDs: %d", len(linked_client_group_ids))
+            except json.JSONDecodeError:
+                logger.error("Invalid linkedClientGroupIds JSON")
+                return jsonify({'error': 'Invalid linkedClientGroupIds JSON'}), 400
+        
         # Save document with placeholders
         file_data = {
             'name': name,
             'description': description,
             'file_path': file_path,
             'file_type': file.content_type,
-            'created_by': request.form.get('created_by')
+            'created_by': request.form.get('created_by'),
+            'is_template': is_template,
+            'linked_client_group_ids': linked_client_group_ids
         }
         
         document = document_service.save_document_with_placeholders(file_data, placeholders)
@@ -119,32 +133,92 @@ def download_document_with_placeholders(document_id):
     logger.info("Received request to download document with ID: %d", document_id)
     try:
         placeholder_values = request.get_json()
-        if not placeholder_values:
+        # Accept empty dict as valid (no placeholders to fill)
+        if placeholder_values is None:
             logger.warning("No placeholder values provided for document with ID: %d", document_id)
             return jsonify({'error': 'No placeholder values provided'}), 400
+        # If placeholder_values is not a dict, it's invalid
+        if not isinstance(placeholder_values, dict):
+            logger.warning("Invalid placeholder values type for document with ID: %d", document_id)
+            return jsonify({'error': 'Invalid placeholder values format'}), 400
+        # Empty dict is valid - means no placeholders to fill
             
         logger.debug("Placeholder values: %s", placeholder_values)
+        logger.info("Placeholder values keys: %s", list(placeholder_values.keys()) if isinstance(placeholder_values, dict) else 'N/A')
+        logger.info("Placeholder values count: %d", len(placeholder_values) if isinstance(placeholder_values, dict) else 0)
+        
+        # Extract contentHtml and exportFormat if provided
+        content_html = placeholder_values.pop('contentHtml', None)
+        export_format = placeholder_values.pop('exportFormat', 'docx')  # Default to docx
+        
+        logger.info("Export format requested: %s", export_format)
+        logger.info("Remaining placeholder values after extraction: %s", list(placeholder_values.keys()) if isinstance(placeholder_values, dict) else 'N/A')
         
         # Generate preview
-        preview_data = document_service.create_document_preview(document_id, placeholder_values)
+        preview_data = document_service.create_document_preview(
+            document_id, 
+            placeholder_values, 
+            content_html=content_html,
+            export_format=export_format
+        )
         
         # Decode base64 data
         file_data = base64.b64decode(preview_data['preview_data'])
         
-        # Create temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.' + preview_data['filename'].split('.')[-1]) as tmp:
+        # Determine file extension from filename or mime_type
+        filename = preview_data.get('filename', 'document')
+        mime_type_from_preview = preview_data.get('mime_type', '')
+        file_ext = os.path.splitext(filename)[1] if '.' in filename else ''
+        
+        # If no extension in filename, use mime_type
+        if not file_ext:
+            if 'pdf' in mime_type_from_preview.lower():
+                file_ext = '.pdf'
+            elif 'wordprocessingml' in mime_type_from_preview.lower() or 'msword' in mime_type_from_preview.lower():
+                file_ext = '.docx'
+            else:
+                file_ext = '.bin'  # Fallback
+        
+        logger.info("Creating temp file - extension: %s, filename: %s, mime_type from preview: %s", 
+                   file_ext, filename, mime_type_from_preview)
+        
+        # Create temporary file with correct extension
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
             tmp.write(file_data)
             tmp_path = tmp.name
             logger.debug("Temporary file created at path: %s", tmp_path)
         
-        # Send file
+        # Send file as attachment (force download)
         logger.info("Sending filled document: %s", preview_data['filename'])
+        import urllib.parse
+        encoded_filename = urllib.parse.quote(preview_data['filename'])
+        
+        # Determine correct MIME type based on filename
+        filename_lower = preview_data['filename'].lower()
+        if filename_lower.endswith('.pdf'):
+            mime_type = 'application/pdf'
+        elif filename_lower.endswith('.docx'):
+            mime_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        elif filename_lower.endswith('.doc'):
+            mime_type = 'application/msword'
+        else:
+            mime_type = 'application/octet-stream'
+        
+        logger.info("Using MIME type: %s for file: %s", mime_type, preview_data['filename'])
+        
         response = send_file(
             tmp_path,
-            mimetype=preview_data['mime_type'],
-            as_attachment=False,
+            mimetype=mime_type,
+            as_attachment=True,  # Force download instead of opening in browser
             download_name=preview_data['filename']
         )
+        # Set Content-Disposition header explicitly with proper encoding for filename
+        # Use 'attachment' to force download, not 'inline'
+        response.headers['Content-Disposition'] = f'attachment; filename="{preview_data["filename"]}"; filename*=UTF-8\'\'{encoded_filename}'
+        # Prevent browser from opening the file
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        # Set correct Content-Type based on file extension
+        response.headers['Content-Type'] = mime_type
         
         # Clean up temp file after sending
         @response.call_on_close
@@ -256,26 +330,449 @@ def update_placeholder_name_in_temp():
 @api_bp.route('/clients', methods=['GET'])
 def get_clients():
     """Get all clients."""
-    clients = Client.query.all()
-    return jsonify([client.to_dict() for client in clients])
+    try:
+        # Use raw SQL query to avoid enum conversion issues
+        from sqlalchemy import text
+        from app.db import db
+        
+        # Query clients with raw SQL to handle invalid enum values
+        query = text("""
+            SELECT * FROM clients
+        """)
+        result = db.session.execute(query)
+        clients_data = []
+        
+        for row in result:
+            client_dict = dict(row._mapping)
+            # Convert enum values safely - handle empty strings and invalid values
+            salutation_val = client_dict.get('salutation')
+            if salutation_val and salutation_val != '':
+                try:
+                    # Try to get enum by name first, then by value
+                    if salutation_val in ['HERR', 'FRAU']:
+                        client_dict['salutation'] = Salutation[salutation_val].value
+                    elif salutation_val in ['Herr', 'Frau']:
+                        client_dict['salutation'] = salutation_val
+                    else:
+                        client_dict['salutation'] = None
+                except (KeyError, AttributeError):
+                    client_dict['salutation'] = None
+            else:
+                client_dict['salutation'] = None
+            
+            legal_form_val = client_dict.get('legal_form')
+            if legal_form_val and legal_form_val != '':
+                try:
+                    # Try to get enum by name first
+                    if legal_form_val in ['GMBH', 'AG', 'OHG', 'UG', 'KG', 'GBR', 'EINZELFIRMA']:
+                        client_dict['legal_form'] = LegalForm[legal_form_val].value
+                    elif legal_form_val in ['GmbH', 'AG', 'OHG', 'UG', 'KG', 'GbR', 'Einzelfirma']:
+                        client_dict['legal_form'] = legal_form_val
+                    else:
+                        client_dict['legal_form'] = None
+                except (KeyError, AttributeError):
+                    client_dict['legal_form'] = None
+            else:
+                client_dict['legal_form'] = None
+            
+            contact_salutation_val = client_dict.get('contact_salutation')
+            if contact_salutation_val and contact_salutation_val != '':
+                try:
+                    if contact_salutation_val in ['HERR', 'FRAU']:
+                        client_dict['contact_salutation'] = Salutation[contact_salutation_val].value
+                    elif contact_salutation_val in ['Herr', 'Frau']:
+                        client_dict['contact_salutation'] = contact_salutation_val
+                    else:
+                        client_dict['contact_salutation'] = None
+                except (KeyError, AttributeError):
+                    client_dict['contact_salutation'] = None
+            else:
+                client_dict['contact_salutation'] = None
+            
+            # Convert dates
+            if client_dict.get('created_at'):
+                client_dict['created_at'] = client_dict['created_at'].isoformat() if hasattr(client_dict['created_at'], 'isoformat') else str(client_dict['created_at'])
+            if client_dict.get('updated_at'):
+                client_dict['updated_at'] = client_dict['updated_at'].isoformat() if hasattr(client_dict['updated_at'], 'isoformat') else str(client_dict['updated_at'])
+            if client_dict.get('birth_date'):
+                client_dict['birth_date'] = client_dict['birth_date'].isoformat() if hasattr(client_dict['birth_date'], 'isoformat') else str(client_dict['birth_date'])
+            
+            clients_data.append(client_dict)
+        
+        return jsonify(clients_data)
+    except Exception as e:
+        logger.error("Error fetching clients: %s", str(e), exc_info=True)
+        # Fallback: try with ORM but catch enum errors
+        try:
+            clients = Client.query.all()
+            result = []
+            for client in clients:
+                try:
+                    result.append(client.to_dict())
+                except Exception as e2:
+                    logger.error("Error converting client %d to dict: %s", client.id, str(e2), exc_info=True)
+                    # Return minimal dict
+                    result.append({
+                        'id': client.id,
+                        'client_type': client.client_type,
+                        'error': f'Error serializing client: {str(e2)}'
+                    })
+            return jsonify(result)
+        except Exception as e3:
+            logger.error("Fallback also failed: %s", str(e3), exc_info=True)
+            return jsonify({'error': f'Failed to fetch clients: {str(e)}'}), 500
 
 @api_bp.route('/clients/<int:client_id>', methods=['GET'])
 def get_client(client_id):
     """Get a specific client."""
-    client = Client.query.get_or_404(client_id)
-    return jsonify(client.to_dict())
+    try:
+        # Use raw SQL query to avoid enum conversion issues
+        from sqlalchemy import text
+        from app.db import db
+        
+        # Query client with raw SQL to handle invalid enum values
+        query = text("""
+            SELECT * FROM clients WHERE id = :client_id
+        """)
+        result = db.session.execute(query, {'client_id': client_id})
+        row = result.fetchone()
+        
+        if not row:
+            return jsonify({'error': 'Client not found'}), 404
+        
+        client_dict = dict(row._mapping)
+        
+        # Convert enum values safely - handle empty strings and invalid values
+        salutation_val = client_dict.get('salutation')
+        logger.info("GET CLIENT - Raw salutation from DB: %s (type: %s)", salutation_val, type(salutation_val).__name__ if salutation_val else 'None')
+        
+        if salutation_val and salutation_val != '':
+            try:
+                # salutation_val could be an enum object, a string like 'HERR'/'FRAU', or a string like 'Herr'/'Frau'
+                if isinstance(salutation_val, str):
+                    salutation_upper = salutation_val.upper()
+                    if salutation_upper in ['HERR', 'FRAU']:
+                        # It's an enum key string, convert to enum and get value
+                        client_dict['salutation'] = Salutation[salutation_upper].value
+                        logger.info("GET CLIENT - Converted salutation '%s' to value: %s", salutation_val, client_dict['salutation'])
+                    elif salutation_val in ['Herr', 'Frau']:
+                        # It's already a display value
+                        client_dict['salutation'] = salutation_val
+                        logger.info("GET CLIENT - Salutation is already display value: %s", salutation_val)
+                    else:
+                        logger.warning("GET CLIENT - Unknown salutation value: %s", salutation_val)
+                        client_dict['salutation'] = None
+                else:
+                    # It's an enum object, get its value
+                    try:
+                        client_dict['salutation'] = salutation_val.value
+                        logger.info("GET CLIENT - Salutation is enum, got value: %s", client_dict['salutation'])
+                    except AttributeError:
+                        # Not an enum, use as is
+                        client_dict['salutation'] = str(salutation_val)
+                        logger.info("GET CLIENT - Salutation is not enum, using as string: %s", client_dict['salutation'])
+            except (KeyError, AttributeError) as e:
+                logger.error("GET CLIENT - Error converting salutation: %s", str(e))
+                client_dict['salutation'] = None
+        else:
+            client_dict['salutation'] = None
+            logger.info("GET CLIENT - Salutation is empty/null, setting to None")
+        
+        legal_form_val = client_dict.get('legal_form')
+        if legal_form_val and legal_form_val != '':
+            try:
+                if legal_form_val in ['GMBH', 'AG', 'OHG', 'UG', 'KG', 'GBR', 'EINZELFIRMA']:
+                    client_dict['legal_form'] = LegalForm[legal_form_val].value
+                elif legal_form_val in ['GmbH', 'AG', 'OHG', 'UG', 'KG', 'GbR', 'Einzelfirma']:
+                    client_dict['legal_form'] = legal_form_val
+                else:
+                    client_dict['legal_form'] = None
+            except (KeyError, AttributeError):
+                client_dict['legal_form'] = None
+        else:
+            client_dict['legal_form'] = None
+        
+        contact_salutation_val = client_dict.get('contact_salutation')
+        if contact_salutation_val and contact_salutation_val != '':
+            try:
+                if contact_salutation_val in ['HERR', 'FRAU']:
+                    client_dict['contact_salutation'] = Salutation[contact_salutation_val].value
+                elif contact_salutation_val in ['Herr', 'Frau']:
+                    client_dict['contact_salutation'] = contact_salutation_val
+                else:
+                    client_dict['contact_salutation'] = None
+            except (KeyError, AttributeError):
+                client_dict['contact_salutation'] = None
+        else:
+            client_dict['contact_salutation'] = None
+        
+        # Convert dates
+        if client_dict.get('created_at'):
+            client_dict['created_at'] = client_dict['created_at'].isoformat() if hasattr(client_dict['created_at'], 'isoformat') else str(client_dict['created_at'])
+        if client_dict.get('updated_at'):
+            client_dict['updated_at'] = client_dict['updated_at'].isoformat() if hasattr(client_dict['updated_at'], 'isoformat') else str(client_dict['updated_at'])
+        if client_dict.get('birth_date'):
+            client_dict['birth_date'] = client_dict['birth_date'].isoformat() if hasattr(client_dict['birth_date'], 'isoformat') else str(client_dict['birth_date'])
+        
+        return jsonify(client_dict)
+    except Exception as e:
+        logger.error("Error fetching client %d: %s", client_id, str(e), exc_info=True)
+        # Fallback: try with ORM but catch enum errors
+        try:
+            client = Client.query.get_or_404(client_id)
+            return jsonify(client.to_dict())
+        except Exception as e2:
+            logger.error("Fallback also failed: %s", str(e2), exc_info=True)
+            return jsonify({'error': f'Failed to fetch client: {str(e)}'}), 500
+
+@api_bp.route('/clients/<int:client_id>', methods=['PUT'])
+def update_client(client_id):
+    """Update an existing client."""
+    try:
+        data = request.get_json()
+        logger.info("=== UPDATE CLIENT REQUEST ===")
+        logger.info("Received request to update client with ID: %d", client_id)
+        logger.info("Client update data: %s", data)
+        logger.info("Salutation in data: %s", 'salutation' in data)
+        logger.info("Salutation value: %s (type: %s)", data.get('salutation'), type(data.get('salutation')).__name__ if data.get('salutation') else 'None')
+        logger.info("birthPlace in data: %s", 'birthPlace' in data)
+        logger.info("birthPlace value: %s (type: %s)", data.get('birthPlace'), type(data.get('birthPlace')).__name__ if data.get('birthPlace') else 'None')
+        logger.info("birth_place in data: %s", 'birth_place' in data)
+        logger.info("birth_place value: %s (type: %s)", data.get('birth_place'), type(data.get('birth_place')).__name__ if data.get('birth_place') else 'None')
+        logger.info("nationality in data: %s", 'nationality' in data)
+        logger.info("nationality value: %s (type: %s)", data.get('nationality'), type(data.get('nationality')).__name__ if data.get('nationality') else 'None')
+        
+        # Check if client exists
+        from sqlalchemy import text
+        from app.db import db
+        
+        check_query = text("SELECT id, client_type FROM clients WHERE id = :client_id")
+        result = db.session.execute(check_query, {'client_id': client_id})
+        row = result.fetchone()
+        
+        if not row:
+            return jsonify({'error': 'Client not found'}), 404
+        
+        client_type = row.client_type
+        
+        # Use ORM to update client
+        client = Client.query.get_or_404(client_id)
+        
+        # Update common fields
+        if 'mandate_manager' in data:
+            client.mandate_manager = data['mandate_manager']
+        if 'mandate_responsible' in data:
+            client.mandate_responsible = data['mandate_responsible']
+        if 'email' in data:
+            client.email = data['email']
+        if 'tax_number' in data:
+            client.tax_number = data['tax_number']
+        if 'tax_office' in data:
+            client.tax_office = data['tax_office']
+        if 'tax_court' in data:
+            client.tax_court = data['tax_court']
+        
+        # Update address fields
+        if 'address_street' in data or 'street' in data:
+            client.address_street = data.get('address_street') or data.get('street')
+        if 'address_number' in data or 'number' in data:
+            client.address_number = data.get('address_number') or data.get('number')
+        if 'address_zip' in data or 'zip' in data:
+            client.address_zip = data.get('address_zip') or data.get('zip')
+        if 'address_city' in data or 'city' in data:
+            client.address_city = data.get('address_city') or data.get('city')
+        
+        # Update tax office address fields
+        if 'tax_office_zip' in data:
+            client.tax_office_zip = data['tax_office_zip']
+        if 'tax_office_city' in data:
+            client.tax_office_city = data['tax_office_city']
+        if 'tax_office_street' in data:
+            client.tax_office_street = data['tax_office_street']
+        if 'tax_office_number' in data:
+            client.tax_office_number = data['tax_office_number']
+        if 'tax_office_email' in data:
+            client.tax_office_email = data['tax_office_email']
+        if 'tax_office_fax' in data:
+            client.tax_office_fax = data['tax_office_fax']
+        
+        # Update fields based on client type
+        if client_type == 'natural':
+            # Update natural person fields
+            # Always update salutation if it's in the data (even if empty/null)
+            if 'salutation' in data:
+                try:
+                    salutation_value = data['salutation']
+                    logger.debug("Updating salutation with value: %s (type: %s)", salutation_value, type(salutation_value).__name__)
+                    
+                    if salutation_value is None:
+                        # Explicitly set to None
+                        logger.debug("Setting salutation to None (explicit null)")
+                        client.salutation = None
+                    elif salutation_value and str(salutation_value).strip():
+                        # Handle both enum values and string values
+                        if isinstance(salutation_value, str):
+                            # Try to convert string to enum
+                            salutation_upper = salutation_value.upper()
+                            if salutation_upper in ['HERR', 'FRAU']:
+                                client.salutation = Salutation[salutation_upper]
+                                logger.debug("Set salutation to enum: %s", client.salutation)
+                            elif salutation_value in ['Herr', 'Frau']:
+                                # Map to enum
+                                client.salutation = Salutation.HERR if salutation_value == 'Herr' else Salutation.FRAU
+                                logger.debug("Set salutation to enum (mapped): %s", client.salutation)
+                            else:
+                                logger.warning("Unknown salutation value: %s, setting to None", salutation_value)
+                                client.salutation = None
+                        else:
+                            client.salutation = salutation_value
+                            logger.debug("Set salutation to provided value: %s", client.salutation)
+                    else:
+                        # Empty string value - clear the salutation
+                        logger.debug("Clearing salutation (empty string received)")
+                        client.salutation = None
+                except (KeyError, ValueError) as e:
+                    logger.error("Invalid salutation value: %s, error: %s", data['salutation'], str(e), exc_info=True)
+                    client.salutation = None
+            # If salutation is not in data, don't change it (keep existing value)
+            else:
+                logger.debug("Salutation not in update data, keeping existing value: %s", client.salutation)
+            
+            if 'title' in data:
+                client.title = data['title']
+            if 'first_name' in data or 'firstName' in data:
+                client.first_name = data.get('first_name') or data.get('firstName')
+            if 'last_name' in data or 'lastName' in data:
+                client.last_name = data.get('last_name') or data.get('lastName')
+            if 'birth_date' in data or 'birthDate' in data:
+                birth_date = data.get('birth_date') or data.get('birthDate')
+                if birth_date:
+                    try:
+                        if isinstance(birth_date, str):
+                            client.birth_date = datetime.strptime(birth_date, "%Y-%m-%d").date()
+                        else:
+                            client.birth_date = birth_date
+                    except ValueError:
+                        logger.warning("Invalid date format for birth_date: %s", birth_date)
+            # Map frontend field names to backend field names
+            if 'birthPlace' in data:
+                client.birth_place = data.get('birthPlace')
+                logger.info("Updated birth_place from 'birthPlace': %s", client.birth_place)
+            elif 'birth_place' in data:
+                client.birth_place = data.get('birth_place')
+                logger.info("Updated birth_place from 'birth_place': %s", client.birth_place)
+            else:
+                logger.warning("Neither 'birthPlace' nor 'birth_place' found in update data")
+            if 'nationality' in data:
+                client.nationality = data.get('nationality')
+                logger.info("Updated nationality: %s", client.nationality)
+            else:
+                logger.warning("'nationality' not found in update data")
+            if 'tax_id' in data or 'taxId' in data:
+                client.tax_id = data.get('tax_id') or data.get('taxId')
+        else:
+            # Update company fields
+            if 'company_name' in data or 'companyName' in data:
+                client.company_name = data.get('company_name') or data.get('companyName')
+            if 'legal_form' in data or 'legalForm' in data:
+                legal_form = data.get('legal_form') or data.get('legalForm')
+                if legal_form:
+                    try:
+                        if isinstance(legal_form, str):
+                            # Try to convert string to enum
+                            legal_form_upper = legal_form.upper()
+                            if legal_form_upper in ['GMBH', 'AG', 'OHG', 'UG', 'KG', 'GBR', 'EINZELFIRMA']:
+                                client.legal_form = LegalForm[legal_form_upper]
+                            else:
+                                # Try to find matching enum value
+                                for enum_key, enum_value in LegalForm.__members__.items():
+                                    if enum_value.value == legal_form:
+                                        client.legal_form = enum_value
+                                        break
+                                else:
+                                    client.legal_form = None
+                        else:
+                            client.legal_form = legal_form
+                    except (KeyError, ValueError) as e:
+                        logger.warning("Invalid legal_form value: %s, error: %s", legal_form, str(e))
+                        client.legal_form = None
+                else:
+                    client.legal_form = None
+            
+            if 'vat_id' in data or 'vatId' in data:
+                client.vat_id = data.get('vat_id') or data.get('vatId')
+            
+            # Update contact person fields
+            if 'contact_salutation' in data or 'contactSalutation' in data:
+                contact_salutation = data.get('contact_salutation') or data.get('contactSalutation')
+                if contact_salutation:
+                    try:
+                        if isinstance(contact_salutation, str):
+                            if contact_salutation.upper() in ['HERR', 'FRAU']:
+                                client.contact_salutation = Salutation[contact_salutation.upper()]
+                            elif contact_salutation in ['Herr', 'Frau']:
+                                client.contact_salutation = Salutation.HERR if contact_salutation == 'Herr' else Salutation.FRAU
+                            else:
+                                client.contact_salutation = None
+                        else:
+                            client.contact_salutation = contact_salutation
+                    except (KeyError, ValueError) as e:
+                        logger.warning("Invalid contact_salutation value: %s, error: %s", contact_salutation, str(e))
+                        client.contact_salutation = None
+                else:
+                    client.contact_salutation = None
+            
+            if 'contact_last_name' in data or 'contactLastName' in data:
+                client.contact_last_name = data.get('contact_last_name') or data.get('contactLastName')
+            if 'contact_phone' in data or 'contactPhone' in data:
+                client.contact_phone = data.get('contact_phone') or data.get('contactPhone')
+            if 'contact_email' in data or 'contactEmail' in data:
+                client.contact_email = data.get('contact_email') or data.get('contactEmail')
+            if 'contact_fax' in data or 'contactFax' in data:
+                client.contact_fax = data.get('contact_fax') or data.get('contactFax')
+        
+        # Update timestamp
+        client.updated_at = datetime.utcnow()
+        
+        try:
+            db.session.commit()
+            logger.info("Client updated successfully with ID: %d", client_id)
+            logger.info("Client salutation after commit: %s (type: %s)", client.salutation, type(client.salutation).__name__ if client.salutation else 'None')
+            logger.info("Client birth_place after commit: %s", client.birth_place)
+            logger.info("Client nationality after commit: %s", client.nationality)
+            client_dict = client.to_dict()
+            logger.info("Client dict salutation after to_dict: %s", client_dict.get('salutation'))
+            logger.info("Client dict birth_place after to_dict: %s", client_dict.get('birth_place'))
+            logger.info("Client dict nationality after to_dict: %s", client_dict.get('nationality'))
+            return jsonify(client_dict), 200
+        except IntegrityError as e:
+            db.session.rollback()
+            logger.error("IntegrityError during client update: %s", str(e))
+            return jsonify({'error': 'Failed to update client: integrity constraint violation'}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error("Error updating client with ID %d: %s", client_id, str(e), exc_info=True)
+        return jsonify({'error': f'Failed to update client: {str(e)}'}), 500
 
 @api_bp.route('/clients/<int:client_id>', methods=['DELETE'])
 def delete_client(client_id):
     """Delete a specific client."""
     try:
-        # Get the client record
-        client = Client.query.get_or_404(client_id)
+        # Use raw SQL query to avoid enum conversion issues when loading the client
+        from sqlalchemy import text
+        from app.db import db
+        
+        # First check if client exists using raw SQL
+        check_query = text("SELECT id FROM clients WHERE id = :client_id")
+        result = db.session.execute(check_query, {'client_id': client_id})
+        if not result.fetchone():
+            return jsonify({"error": "Client not found"}), 404
+        
         logger.info("Found client with ID: %d for deletion", client_id)
         
-        # Simply delete the client and let the database handle cascades
-        # or if no relationships exist, this will just delete the client
-        db.session.delete(client)
+        # Delete using raw SQL to avoid enum issues
+        delete_query = text("DELETE FROM clients WHERE id = :client_id")
+        db.session.execute(delete_query, {'client_id': client_id})
         db.session.commit()
         
         logger.info("Client deleted successfully with ID: %d", client_id)
@@ -283,22 +780,63 @@ def delete_client(client_id):
     except Exception as e:
         db.session.rollback()
         logger.error("Error deleting client with ID %d: %s", client_id, str(e), exc_info=True)
-        return jsonify({"error": f"Failed to delete client: {str(e)}"}), 500
+        # Fallback: try with ORM but catch enum errors
+        try:
+            client = Client.query.get_or_404(client_id)
+            db.session.delete(client)
+            db.session.commit()
+            logger.info("Client deleted successfully with ID: %d (fallback)", client_id)
+            return jsonify({"success": True, "message": "Client deleted successfully"}), 200
+        except Exception as e2:
+            db.session.rollback()
+            logger.error("Fallback delete also failed: %s", str(e2), exc_info=True)
+            return jsonify({"error": f"Failed to delete client: {str(e)}"}), 500
 
 @api_bp.route('/clients', methods=['POST'])
 def create_client():
     """Create a new client."""
     try:
         data = request.get_json()
-        logger.debug("Received client data: %s", data)
+        logger.info("=== CREATE CLIENT REQUEST ===")
+        logger.info("Received client data: %s", data)
+        logger.info("Client type: %s", data.get('client_type'))
+        logger.info("Salutation in data: %s", 'salutation' in data)
+        logger.info("Salutation value: %s (type: %s)", data.get('salutation'), type(data.get('salutation')).__name__ if data.get('salutation') else 'None')
         
         # Convert string values of Enum to objects of Enum
-        if data.get('client_type') == 'natural' and data.get('salutation'):
-            try:
-                data['salutation'] = Salutation[data['salutation']]
-            except KeyError:
-                logger.error("Invalid salutation value: %s", data['salutation'])
-                return jsonify({'error': f'Invalid salutation value: {data["salutation"]}'}), 400
+        if data.get('client_type') == 'natural' and 'salutation' in data:
+            salutation_value = data.get('salutation')
+            logger.info("Processing salutation for natural person: %s (type: %s)", salutation_value, type(salutation_value).__name__ if salutation_value else 'None')
+            
+            if salutation_value:
+                try:
+                    # Handle both 'HERR'/'FRAU' (enum keys) and 'Herr'/'Frau' (display values)
+                    if isinstance(salutation_value, str):
+                        salutation_upper = salutation_value.upper()
+                        logger.info("Salutation string value: '%s', upper: '%s'", salutation_value, salutation_upper)
+                        if salutation_upper in ['HERR', 'FRAU']:
+                            data['salutation'] = Salutation[salutation_upper]
+                            logger.info("Converted salutation '%s' to enum: %s", salutation_value, data['salutation'])
+                        elif salutation_value in ['Herr', 'Frau']:
+                            # Map display value to enum
+                            data['salutation'] = Salutation.HERR if salutation_value == 'Herr' else Salutation.FRAU
+                            logger.info("Converted salutation '%s' to enum (mapped): %s", salutation_value, data['salutation'])
+                        else:
+                            logger.warning("Unknown salutation value: '%s', setting to None", salutation_value)
+                            data['salutation'] = None
+                    else:
+                        # Already an enum or other type
+                        data['salutation'] = salutation_value
+                        logger.info("Salutation already processed: %s", data['salutation'])
+                except (KeyError, ValueError) as e:
+                    logger.error("Invalid salutation value: %s, error: %s", salutation_value, str(e), exc_info=True)
+                    return jsonify({'error': f'Invalid salutation value: {salutation_value}'}), 400
+            else:
+                # Empty or None value - set to None
+                data['salutation'] = None
+                logger.info("Setting salutation to None (empty/null value)")
+        elif data.get('client_type') == 'natural':
+            logger.info("Natural person but salutation not in data, will be None by default")
         
         if data.get('client_type') == 'company' and data.get('legal_form'):
             try:
@@ -322,12 +860,26 @@ def create_client():
                 logger.error("Invalid date format for birth_date: %s", data['birth_date'])
                 return jsonify({'error': f'Invalid date format for birth_date: {data["birth_date"]}. Use YYYY-MM-DD format.'}), 400
         
+        # Map frontend field names to backend field names
+        # Frontend uses camelCase (birthPlace), backend uses snake_case (birth_place)
+        if 'birthPlace' in data:
+            data['birth_place'] = data.pop('birthPlace')
+        # nationality is the same in both frontend and backend
+        
+        logger.info("Creating client with data (after processing): %s", {k: v for k, v in data.items() if k != 'salutation' or v is not None})
+        logger.info("Birth place in data: %s (type: %s)", data.get('birth_place'), type(data.get('birth_place')).__name__ if data.get('birth_place') else 'None')
+        logger.info("Nationality in data: %s (type: %s)", data.get('nationality'), type(data.get('nationality')).__name__ if data.get('nationality') else 'None')
+        logger.info("Salutation before creating client: %s (type: %s)", data.get('salutation'), type(data.get('salutation')).__name__ if data.get('salutation') else 'None')
+        
         client = Client(**data)
         db.session.add(client)
         try:
             db.session.commit()
             logger.info("Client created successfully with ID: %d", client.id)
-            return jsonify(client.to_dict()), 201
+            logger.info("Client salutation after save: %s", client.salutation)
+            client_dict = client.to_dict()
+            logger.info("Client dict salutation: %s", client_dict.get('salutation'))
+            return jsonify(client_dict), 201
         except IntegrityError as e:
             db.session.rollback()
             logger.error("IntegrityError during client creation: %s", str(e))
@@ -368,9 +920,18 @@ def get_tax_advisor(advisor_id):
 # Document routes
 @api_bp.route('/documents', methods=['GET'])
 def get_documents():
-    """Get all documents."""
-    documents = Document.query.all()
-    return jsonify([doc.to_dict() for doc in documents])
+    """Get all documents (excluding templates)."""
+    try:
+        # Only return documents where is_template=False or is_template is NULL
+        documents = Document.query.filter(
+            (Document.is_template == False) | (Document.is_template.is_(None))
+        ).all()
+        result = [doc.to_dict() for doc in documents]
+        logger.info("Retrieved %d documents (templates excluded)", len(result))
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error("Error retrieving documents: %s", str(e), exc_info=True)
+        return jsonify({'error': f'Failed to retrieve documents: {str(e)}'}), 500
 
 @api_bp.route('/documents/<int:document_id>', methods=['GET'])
 def get_document(document_id):
@@ -380,15 +941,36 @@ def get_document(document_id):
 
 @api_bp.route('/documents/<int:document_id>/file', methods=['GET'])
 def get_document_file(document_id):
-    """Get the original file of a specific document."""
+    """Get the original file of a specific document.
+    
+    If the document is not a template and has no file_path, it will try to use
+    the template's file_path if the document was created from a template.
+    """
     logger.info("Received request to get file for document with ID: %d", document_id)
     try:
         # Get the document record
         document = Document.query.get_or_404(document_id)
         
+        # Check if file_path is set
+        file_path_to_use = document.file_path
+        
+        # If document has no file_path and is not a template, try to find the template it was created from
+        if not file_path_to_use and not document.is_template:
+            # Documents created from templates might reference the template's file
+            # For now, we'll return 404, but the frontend should use the template file instead
+            logger.warning("Document with ID %d has no file_path set and is not a template", document_id)
+            return jsonify({"error": "Document file not found - no file path set. Use template file instead."}), 404
+        
+        # Construct full path if file_path is relative
+        from flask import current_app
+        if not os.path.isabs(document.file_path):
+            full_path = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'uploads'), document.file_path)
+        else:
+            full_path = document.file_path
+        
         # Check if file exists
-        if not document.file_path or not os.path.exists(document.file_path):
-            logger.error("Document file not found for ID %d at path: %s", document_id, document.file_path)
+        if not os.path.exists(full_path):
+            logger.error("Document file not found for ID %d at path: %s", document_id, full_path)
             return jsonify({"error": "Document file not found"}), 404
         
         # Determine MIME type
@@ -399,7 +981,7 @@ def get_document_file(document_id):
         
         logger.info("Sending document file: %s", filename)
         return send_file(
-            document.file_path,
+            full_path,
             mimetype=mime_type,
             as_attachment=False,
             download_name=filename
@@ -434,20 +1016,34 @@ def get_document_text(document_id):
 
 @api_bp.route('/documents/<int:document_id>', methods=['DELETE'])
 def delete_document(document_id):
-    """Delete a specific document."""
+    """Delete a specific document (templates cannot be deleted via this endpoint)."""
     logger.info("Received request to delete document with ID: %d", document_id)
     try:
         # Get the document record
         document = Document.query.get_or_404(document_id)
+        
+        # Prevent deletion of templates via this endpoint
+        if document.is_template:
+            logger.warning("Attempt to delete template %d via document endpoint", document_id)
+            return jsonify({'error': 'Templates cannot be deleted via this endpoint. Use the templates endpoint instead.'}), 400
+        
         logger.info("Found document with ID: %d for deletion", document_id)
         
         # Delete the document file if it exists
-        if document.file_path and os.path.exists(document.file_path):
-            try:
-                os.remove(document.file_path)
-                logger.info("Deleted document file: %s", document.file_path)
-            except OSError as e:
-                logger.warning("Could not delete document file %s: %s", document.file_path, str(e))
+        if document.file_path:
+            # Construct full path if file_path is relative
+            from flask import current_app
+            if not os.path.isabs(document.file_path):
+                full_path = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'uploads'), document.file_path)
+            else:
+                full_path = document.file_path
+            
+            if os.path.exists(full_path):
+                try:
+                    os.remove(full_path)
+                    logger.info("Deleted document file: %s", full_path)
+                except OSError as e:
+                    logger.warning("Could not delete document file %s: %s", full_path, str(e))
         
         # Delete the document from database
         db.session.delete(document)
@@ -462,13 +1058,18 @@ def delete_document(document_id):
 
 @api_bp.route('/documents/<int:document_id>', methods=['PUT'])
 def update_document(document_id):
-    """Update an existing document template.
+    """Update an existing document or template.
     
+    Can accept either form data (for file uploads) or JSON (for content updates).
     Form data can include:
     - file: The new document file (optional)
-    - name: Template name
+    - name: Document/Template name
     - description: Template description (optional)
     - placeholders: JSON string of placeholder definitions (optional)
+    
+    JSON data can include:
+    - content: HTML content
+    - placeholders: placeholder definitions array
     """
     logger.info("Received request to update document with ID: %d", document_id)
     try:
@@ -476,6 +1077,37 @@ def update_document(document_id):
         document = Document.query.get_or_404(document_id)
         logger.info("Found document with ID: %d for update", document_id)
         
+        # Check if request is JSON or form data
+        if request.is_json:
+            data = request.get_json()
+            # Accept both 'content' and 'contentHtml' for compatibility
+            if 'contentHtml' in data:
+                document.content = data['contentHtml']
+                logger.debug("Updated document content from contentHtml")
+            elif 'content' in data:
+                document.content = data['content']
+                logger.debug("Updated document content")
+            if 'placeholders' in data:
+                document.placeholders = data['placeholders']
+                logger.debug("Updated document placeholders")
+            # Update client_id if provided (for documents, not templates)
+            if 'clientId' in data and not document.is_template:
+                client_id = data.get('clientId')
+                logger.info("Received clientId in update request: %s (type: %s)", client_id, type(client_id).__name__)
+                if client_id is not None and client_id != '':
+                    try:
+                        document.client_id = int(client_id)
+                        logger.info("Updated document client_id to: %d", document.client_id)
+                    except (ValueError, TypeError) as e:
+                        logger.warning("Invalid clientId provided: %s (error: %s)", client_id, str(e))
+                else:
+                    logger.debug("clientId is None or empty, not updating")
+            document.updated_at = datetime.utcnow()
+            db.session.commit()
+            logger.info("Successfully updated document with ID: %d", document_id)
+            return jsonify(document.to_dict()), 200
+        
+        # Handle form data (existing logic)
         # Update document metadata
         if 'name' in request.form:
             document.title = request.form['name']
@@ -1161,11 +1793,12 @@ def get_document_templates():
     """Get all document templates with their placeholders.
     
     Returns a list of templates that can be used to create new documents.
+    Only returns documents where is_template=True.
     """
     logger.info("Received request to get all document templates")
     try:
-        # Get all documents
-        documents = Document.query.all()
+        # Get only templates (is_template=True)
+        documents = Document.query.filter_by(is_template=True).all()
         
         # Format document data with placeholders
         result = []
@@ -1173,16 +1806,17 @@ def get_document_templates():
             # Get placeholders from JSON field instead of querying the Placeholder table
             placeholders_data = doc.placeholders or []
             
-            if doc.content is None:
-                continue
-            
+            # Include documents even if content is None (they will be loaded from file in editor)
             doc_dict = {
-                'id': doc.id,
+                'id': str(doc.id),
                 'name': doc.title,  # Use title as name for frontend consistency
-                'description': doc.content,  # Use content as description
+                'contentHtml': doc.content or '',  # HTML content for editor (empty if not yet converted)
                 'file_type': doc.document_type,
+                'file_path': doc.file_path,  # Include file_path for finding templates by file path
                 'created_at': doc.created_at.isoformat() if doc.created_at else None,
-                'placeholders': placeholders_data
+                'updated_at': doc.updated_at.isoformat() if doc.updated_at else None,
+                'placeholders': placeholders_data,
+                'linkedClientGroupIds': doc.linked_client_group_ids or []
             }
             
             result.append(doc_dict)
@@ -1193,52 +1827,225 @@ def get_document_templates():
         logger.error("Error retrieving document templates: %s", str(e), exc_info=True)
         return jsonify({'error': f'Failed to retrieve templates: {str(e)}'}), 500
 
+@api_bp.route('/documents/templates/<int:template_id>', methods=['GET'])
+def get_template(template_id):
+    """Get a specific template by ID."""
+    logger.info("Received request to get template with ID: %d", template_id)
+    try:
+        # First try to find as template
+        template = Document.query.filter_by(id=template_id, is_template=True).first()
+        # If not found as template, try to find as regular document (for editing)
+        if not template:
+            template = Document.query.filter_by(id=template_id).first()
+            if template:
+                logger.info("Found document with ID %d, but it's not marked as template. Returning anyway for editing.", template_id)
+        
+        if not template:
+            logger.error("Template/Document with ID %d not found", template_id)
+            return jsonify({'error': f'Template with ID {template_id} not found'}), 404
+        
+        return jsonify({
+            'id': str(template.id),
+            'name': template.title,
+            'contentHtml': template.content or '',
+            'placeholders': template.placeholders or [],
+            'linkedClientGroupIds': template.linked_client_group_ids or [],
+            'file_path': template.file_path  # Include file_path for finding templates by file path
+        }), 200
+    except Exception as e:
+        logger.error("Error retrieving template %d: %s", template_id, str(e), exc_info=True)
+        return jsonify({'error': f'Failed to retrieve template: {str(e)}'}), 500
+
+@api_bp.route('/documents/templates/<int:template_id>', methods=['PATCH', 'PUT'])
+def update_template(template_id):
+    """Update a template (name, contentHtml, placeholders, linkedClientGroupIds)."""
+    logger.info("Received request to update template with ID: %d", template_id)
+    try:
+        template = Document.query.filter_by(id=template_id, is_template=True).first()
+        if not template:
+            logger.error("Template with ID %d not found", template_id)
+            return jsonify({'error': f'Template with ID {template_id} not found'}), 404
+        
+        data = request.get_json()
+        if 'name' in data:
+            template.title = data['name']
+        if 'contentHtml' in data:
+            template.content = data['contentHtml']
+        if 'placeholders' in data:
+            template.placeholders = data['placeholders']
+        if 'linkedClientGroupIds' in data:
+            template.linked_client_group_ids = data['linkedClientGroupIds']
+        
+        template.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        logger.info("Successfully updated template with ID: %d", template_id)
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        logger.error("Error updating template %d: %s", template_id, str(e), exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update template: {str(e)}'}), 500
+
+@api_bp.route('/documents/templates/<int:template_id>', methods=['DELETE'])
+def delete_template(template_id):
+    """Delete a specific template."""
+    logger.info("Received request to delete template with ID: %d", template_id)
+    try:
+        # Get the template record - must be a template
+        template = Document.query.filter_by(id=template_id, is_template=True).first()
+        if not template:
+            logger.error("Template with ID %d not found", template_id)
+            return jsonify({'error': f'Template with ID {template_id} not found'}), 404
+        
+        logger.info("Found template with ID: %d for deletion", template_id)
+        
+        # Delete the template file if it exists
+        if template.file_path:
+            # Construct full path if file_path is relative
+            from flask import current_app
+            if not os.path.isabs(template.file_path):
+                full_path = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'uploads'), template.file_path)
+            else:
+                full_path = template.file_path
+            
+            if os.path.exists(full_path):
+                try:
+                    os.remove(full_path)
+                    logger.info("Deleted template file: %s", full_path)
+                except OSError as e:
+                    logger.warning("Could not delete template file %s: %s", full_path, str(e))
+        
+        # Delete the template from database
+        db.session.delete(template)
+        db.session.commit()
+        
+        logger.info("Template deleted successfully with ID: %d", template_id)
+        return jsonify({"success": True, "message": "Template deleted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error("Error deleting template with ID %d: %s", template_id, str(e), exc_info=True)
+        return jsonify({"error": f"Failed to delete template: {str(e)}"}), 500
+
+@api_bp.route('/db-fields', methods=['GET'])
+def get_db_fields():
+    """Get all available database fields for placeholder mapping.
+    
+    Returns a list of fields that can be mapped to placeholders.
+    """
+    logger.info("Received request to get DB fields")
+    try:
+        # Define available DB fields based on Client model structure
+        db_fields = [
+            # Mandant (Client) fields
+            {'id': '1', 'entity': 'Mandant', 'key': 'mandant.name', 'label': 'Mandant Name', 'type': 'text'},
+            {'id': '2', 'entity': 'Mandant', 'key': 'mandant.steuernummer', 'label': 'Steuernummer', 'type': 'text'},
+            {'id': '3', 'entity': 'Mandant', 'key': 'mandant.email', 'label': 'E-Mail', 'type': 'text'},
+            {'id': '4', 'entity': 'Mandant', 'key': 'mandant.firmenname', 'label': 'Firmenname', 'type': 'text'},
+            {'id': '5', 'entity': 'Mandant', 'key': 'mandant.rechtsform', 'label': 'Rechtsform', 'type': 'text'},
+            {'id': '6', 'entity': 'Mandant', 'key': 'mandant.umsatzsteuerId', 'label': 'Umsatzsteuer-ID', 'type': 'text'},
+            {'id': '7', 'entity': 'Mandant', 'key': 'mandant.ansprechpartner', 'label': 'Ansprechpartner', 'type': 'text'},
+            {'id': '8', 'entity': 'Mandant', 'key': 'mandant.anrede', 'label': 'Anrede', 'type': 'text'},
+            {'id': '9', 'entity': 'Mandant', 'key': 'mandant.titel', 'label': 'Titel', 'type': 'text'},
+            {'id': '10', 'entity': 'Mandant', 'key': 'mandant.vorname', 'label': 'Vorname', 'type': 'text'},
+            {'id': '11', 'entity': 'Mandant', 'key': 'mandant.nachname', 'label': 'Nachname', 'type': 'text'},
+            {'id': '12', 'entity': 'Mandant', 'key': 'mandant.geburtstag', 'label': 'Geburtstag', 'type': 'date'},
+            {'id': '13', 'entity': 'Mandant', 'key': 'mandant.steuerId', 'label': 'Steuer-ID', 'type': 'text'},
+            {'id': '23', 'entity': 'Mandant', 'key': 'mandant.geburtsort', 'label': 'Geburtsort', 'type': 'text'},
+            {'id': '24', 'entity': 'Mandant', 'key': 'mandant.staatsangehörigkeit', 'label': 'Staatsangehörigkeit', 'type': 'text'},
+            # Adresse fields
+            {'id': '14', 'entity': 'Adresse', 'key': 'adresse.strasse', 'label': 'Straße', 'type': 'text'},
+            {'id': '15', 'entity': 'Adresse', 'key': 'adresse.nummer', 'label': 'Hausnummer', 'type': 'text'},
+            {'id': '16', 'entity': 'Adresse', 'key': 'adresse.plz', 'label': 'PLZ', 'type': 'text'},
+            {'id': '17', 'entity': 'Adresse', 'key': 'adresse.ort', 'label': 'Ort', 'type': 'text'},
+            # Finanzamt fields
+            {'id': '18', 'entity': 'Finanzamt', 'key': 'finanzamt.name', 'label': 'Finanzamt Name', 'type': 'text'},
+            {'id': '19', 'entity': 'Finanzamt', 'key': 'finanzamt.strasse', 'label': 'Finanzamt Straße', 'type': 'text'},
+            {'id': '20', 'entity': 'Finanzamt', 'key': 'finanzamt.plz', 'label': 'Finanzamt PLZ', 'type': 'text'},
+            {'id': '21', 'entity': 'Finanzamt', 'key': 'finanzamt.ort', 'label': 'Finanzamt Ort', 'type': 'text'},
+            {'id': '22', 'entity': 'Finanzamt', 'key': 'finanzamt.email', 'label': 'Finanzamt E-Mail', 'type': 'text'},
+        ]
+        
+        logger.info("Successfully retrieved %d DB fields", len(db_fields))
+        return jsonify(db_fields), 200
+    except Exception as e:
+        logger.error("Error retrieving DB fields: %s", str(e), exc_info=True)
+        return jsonify({'error': f'Failed to retrieve DB fields: {str(e)}'}), 500
+
 @api_bp.route('/documents/create-from-template/<int:template_id>', methods=['POST'])
 def create_from_template(template_id):
     """Create a document from a template with placeholders filled in.
     
-    Request body should contain placeholder values as JSON.
-    Returns the generated document data.
+    Request body should contain:
+    - placeholder values as JSON (optional, can be in fillValues)
+    - contentHtml: HTML content for the document (optional)
+    - placeholders: placeholder definitions (optional)
+    - client_id: ID of the client this document is for (optional)
+    
+    Returns the created document with its ID.
     """
     logger.info("Received request to create document from template with ID: %d", template_id)
     try:
-        placeholder_values = request.get_json()
-        if not placeholder_values:
-            logger.warning("No placeholder values provided for template with ID: %d", template_id)
-            return jsonify({'error': 'No placeholder values provided'}), 400
-            
-        logger.debug("Placeholder values: %s", placeholder_values)
+        data = request.get_json() or {}
+        placeholder_values = data.get('fillValues') or data  # Support both formats
+        client_id = data.get('client_id')
+        content_html = data.get('contentHtml')
+        placeholders = data.get('placeholders')
+        
+        logger.info("Creating document from template %d with client_id: %s (type: %s)", template_id, client_id, type(client_id).__name__ if client_id else 'None')
         
         # Find the template
-        document = Document.query.get(template_id)
-        if not document:
+        template = Document.query.filter_by(id=template_id, is_template=True).first()
+        if not template:
             logger.error("Template with ID %d not found", template_id)
             return jsonify({'error': f'Template with ID {template_id} not found'}), 404
         
-        # Get associated placeholders from JSON field
-        placeholders = document.placeholders or []
-        logger.debug("Found %d placeholders for template", len(placeholders))
+        # Get placeholders from request or template
+        final_placeholders = placeholders if placeholders is not None else (template.placeholders or [])
         
-        # Validate required placeholders are provided
-        missing_required = []
-        for placeholder in placeholders:
-            if placeholder.get('required', False) and placeholder.get('name') not in placeholder_values:
-                missing_required.append(placeholder.get('name'))
+        # Get content from request or template
+        final_content = content_html if content_html is not None else (template.content or '')
         
-        if missing_required:
-            logger.error("Missing required placeholders: %s", ", ".join(missing_required))
-            return jsonify({'error': f'Missing required placeholders: {", ".join(missing_required)}'}), 400
+        # Convert client_id to int if provided
+        client_id_int = None
+        if client_id is not None and client_id != '':
+            try:
+                client_id_int = int(client_id)
+                logger.info("Converted client_id to int: %d", client_id_int)
+            except (ValueError, TypeError) as e:
+                logger.warning("Invalid client_id provided: %s (error: %s), setting to None", client_id, str(e))
         
-        # Generate document
-        preview_data = document_service.create_document_preview(template_id, placeholder_values)
-        logger.info("Successfully created document from template with ID: %d", template_id)
+        # Create new document (not a template)
+        # Documents reference the template's file_path so they can load the original file if needed
+        new_document = Document(
+            title=template.title,  # Use template title as base
+            content=final_content,
+            document_type=template.document_type,
+            status='draft',
+            placeholders=final_placeholders,
+            is_template=False,  # Important: This is a document, not a template
+            client_id=client_id_int,
+            file_path=template.file_path,  # Reference template's file for loading if needed
+        )
         
-        return jsonify(preview_data), 200
+        logger.info("Created document object with client_id: %s", new_document.client_id)
+        
+        db.session.add(new_document)
+        db.session.commit()
+        
+        logger.info("Successfully created document with ID: %d from template with ID: %d", new_document.id, template_id)
+        return jsonify({
+            'id': new_document.id,
+            'name': new_document.title,
+            'contentHtml': new_document.content or '',
+            'placeholders': new_document.placeholders or [],
+        }), 201
     except ValueError as e:
         logger.error("Error creating document from template %d: %s", template_id, str(e))
+        db.session.rollback()
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         logger.error("Exception creating document from template %d: %s", template_id, str(e), exc_info=True)
+        db.session.rollback()
         return jsonify({'error': f'Failed to create document: {str(e)}'}), 500
 
 # User Settings Routes
@@ -1550,6 +2357,24 @@ def get_workflow_documents_summary(order_id):
     except Exception as e:
         logger.error("Error getting workflow documents summary %d: %s", order_id, str(e), exc_info=True)
         return jsonify({'error': f'Failed to get documents summary: {str(e)}'}), 500
+
+@api_bp.route('/users', methods=['GET'])
+def get_users():
+    """Get all users."""
+    try:
+        from app.models import User
+        users = User.query.all()
+        result = [{
+            'id': str(user.id),
+            'name': user.name,
+            'email': user.email,
+            'role': user.role,
+            'language': user.language,
+        } for user in users]
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error("Error retrieving users: %s", str(e), exc_info=True)
+        return jsonify({'error': f'Failed to retrieve users: {str(e)}'}), 500
 
 @api_bp.route('/users', methods=['POST'])
 def create_user():

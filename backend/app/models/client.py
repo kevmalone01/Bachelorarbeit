@@ -39,20 +39,22 @@ class Client(db.Model):
     address_number = db.Column(db.String(10))  # Nr.
 
     # Fields for natural persons
-    salutation = db.Column(db.Enum(Salutation))  # Anrede
+    salutation = db.Column(db.Enum(Salutation, native_enum=False, values_callable=lambda x: [e.value for e in x]))  # Anrede
     title = db.Column(db.String(50))  # Titel
     first_name = db.Column(db.String(100))  # Vorname
     last_name = db.Column(db.String(100))  # Nachname
     birth_date = db.Column(db.Date)  # Geburtsdatum
+    birth_place = db.Column(db.String(100))  # Geburtsort
+    nationality = db.Column(db.String(100))  # Staatsangehörigkeit
     tax_id = db.Column(db.String(50))  # Steuer-ID
 
     # Fields for companies
     company_name = db.Column(db.String(100))  # Firma
-    legal_form = db.Column(db.Enum(LegalForm))  # Rechtsform
+    legal_form = db.Column(db.Enum(LegalForm, native_enum=False, values_callable=lambda x: [e.value for e in x]))  # Rechtsform
     vat_id = db.Column(db.String(50))  # USt-ID
 
     # Contact person fields (for companies)
-    contact_salutation = db.Column(db.Enum(Salutation))  # Anrede Ansprechpartner
+    contact_salutation = db.Column(db.Enum(Salutation, native_enum=False, values_callable=lambda x: [e.value for e in x]))  # Anrede Ansprechpartner
     contact_last_name = db.Column(db.String(100))  # Nachname Ansprechpartner
     contact_phone = db.Column(db.String(50))  # Telefon Ansprechpartner
     contact_email = db.Column(db.String(120))  # E-Mail Ansprechpartner
@@ -98,20 +100,46 @@ class Client(db.Model):
         }
 
         if self.client_type == 'natural':
+            # Safely handle salutation enum - might be None or invalid value
+            salutation_value = None
+            try:
+                if self.salutation:
+                    salutation_value = self.salutation.value
+            except (AttributeError, ValueError, LookupError):
+                # Handle case where salutation is an invalid enum value
+                salutation_value = None
+            
             base_dict.update({
-                'salutation': self.salutation.value if self.salutation else None,
+                'salutation': salutation_value,
                 'title': self.title,
                 'first_name': self.first_name,
                 'last_name': self.last_name,
                 'birth_date': self.birth_date.isoformat() if self.birth_date else None,
+                'birth_place': self.birth_place,
+                'nationality': self.nationality,
                 'tax_id': self.tax_id
             })
         else:
+            # Safely handle legal_form and contact_salutation enums
+            legal_form_value = None
+            try:
+                if self.legal_form:
+                    legal_form_value = self.legal_form.value
+            except (AttributeError, ValueError, LookupError):
+                legal_form_value = None
+            
+            contact_salutation_value = None
+            try:
+                if self.contact_salutation:
+                    contact_salutation_value = self.contact_salutation.value
+            except (AttributeError, ValueError, LookupError):
+                contact_salutation_value = None
+            
             base_dict.update({
                 'company_name': self.company_name,
-                'legal_form': self.legal_form.value if self.legal_form else None,
+                'legal_form': legal_form_value,
                 'vat_id': self.vat_id,
-                'contact_salutation': self.contact_salutation.value if self.contact_salutation else None,
+                'contact_salutation': contact_salutation_value,
                 'contact_last_name': self.contact_last_name,
                 'contact_phone': self.contact_phone,
                 'contact_email': self.contact_email,

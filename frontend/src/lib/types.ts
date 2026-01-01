@@ -108,6 +108,8 @@ export interface ClientItem {
   firstName?: string;
   lastName?: string;
   birthDate?: string;  // ISO
+  birthPlace?: string;  // Geburtsort
+  nationality?: string;  // Staatsangehörigkeit
   taxId?: string;  // Steuer-ID
   
   // Unternehmen
@@ -161,5 +163,40 @@ export interface TemplatesQueryParams {
   pageSize?: number;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
+}
+
+// ---- Document Editor ----
+export type PlaceholderType = 'text' | 'number' | 'date' | 'dropdown' | 'multiline';
+
+export interface DbField {
+  id: string;
+  entity: 'Mandant' | 'Dokument' | 'Adresse' | 'Custom';
+  key: string;        // z.B. mandant.name
+  label: string;      // Anzeigename
+  type: PlaceholderType;
+  options?: string[]; // falls dropdown
+}
+
+export interface Placeholder {
+  key: string;               // z.B. 'Firma'
+  type: PlaceholderType;     // heuristisch, später editierbar
+  label?: string;            // anzeigen
+  mappedFieldId?: string;    // Verknüpfung zu DbField.id
+  defaultValue?: string;
+  required?: boolean;
+  description?: string;
+}
+
+export interface DocumentTemplate {
+  id: string;
+  name: string;
+  contentHtml: string;       // Rohinhalt (mit {{...}})
+  placeholders: Placeholder[];
+  linkedClientGroupIds?: string[];
+  filePath?: string | null;  // Path to the original file (for loading template file when editing documents)
+}
+
+export interface FillValues { 
+  [key: string]: string | number | null; 
 }
 

@@ -50,41 +50,41 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ (e:'apply', v:any):void; (e:'reset'):void }>();
 
-// Initialisiere Filter: Standardmäßig alles ausgewählt, außer wenn URL-Parameter vorhanden sind
+// Initialisiere Filter: Standardmäßig KEINE ausgewählt
 const local = reactive({ 
   type: props.selected.type && props.selected.type.length > 0 
     ? [...props.selected.type] 
-    : ['Natürliche Person', 'Gewerbe'] as string[] 
+    : [] as string[] // Standardmäßig KEINE Typen ausgewählt
 });
 
 const checkedAdvisors = reactive<Record<string, boolean>>({});
 const checkedLegal = reactive<Record<string, boolean>>({});
 
-// Initialisiere Berater: Standardmäßig alle ausgewählt
+// Initialisiere Berater: Standardmäßig KEINE ausgewählt
 function initializeAdvisors() {
   props.advisors.forEach(a => {
     if (props.selected.advisorId && props.selected.advisorId.length > 0) {
       checkedAdvisors[a.id] = props.selected.advisorId.includes(a.id);
     } else {
-      checkedAdvisors[a.id] = true; // Standardmäßig ausgewählt
+      checkedAdvisors[a.id] = false; // Standardmäßig NICHT ausgewählt
     }
   });
 }
 
-// Initialisiere Rechtsformen: Standardmäßig alle ausgewählt
+// Initialisiere Rechtsformen: Standardmäßig KEINE ausgewählt
 function initializeLegalForms() {
   availableLegalForms.value.forEach(lf => {
     if (props.selected.legalForm && props.selected.legalForm.length > 0) {
       checkedLegal[lf] = props.selected.legalForm.includes(lf);
     } else {
-      checkedLegal[lf] = true; // Standardmäßig ausgewählt
+      checkedLegal[lf] = false; // Standardmäßig NICHT ausgewählt
     }
   });
 }
 
 // Watch für props.selected.type
 watch(() => props.selected.type, (v) => {
-  local.type = v && v.length > 0 ? [...v] : ['Natürliche Person', 'Gewerbe'];
+  local.type = v && v.length > 0 ? [...v] : []; // Standardmäßig KEINE Typen ausgewählt
 });
 
 const showAllAdvisors = reactive({ v:false });
@@ -163,11 +163,21 @@ const availableLegalForms = computed(() => {
 const emitFilters = useDebounceFn(() => {
   const advisorId = Object.keys(checkedAdvisors).filter(k => checkedAdvisors[k]);
   const legalForm = Object.keys(checkedLegal).filter(k => checkedLegal[k]);
-  // Stelle sicher, dass type ein Array ist und nicht leer
-  const type = Array.isArray(local.type) && local.type.length > 0 
-    ? local.type 
-    : ['Natürliche Person', 'Gewerbe'];
-  emit('apply', { type, advisorId, legalForm });
+  const type = Array.isArray(local.type) ? local.type : [];
+  
+  // Nur Filter anwenden, wenn tatsächlich Werte ausgewählt sind
+  const filters: any = {};
+  if (type.length > 0) {
+    filters.type = type;
+  }
+  if (advisorId.length > 0) {
+    filters.advisorId = advisorId;
+  }
+  if (legalForm.length > 0) {
+    filters.legalForm = legalForm;
+  }
+  
+  emit('apply', filters);
 }, 300);
 
 // Watch für automatische Filteranwendung bei Änderungen
@@ -192,22 +202,26 @@ watch(availableLegalForms, () => {
 onMounted(() => {
   initializeAdvisors();
   initializeLegalForms();
-  // Wende Filter automatisch an beim ersten Laden
-  // Kurze Verzögerung, damit alle Initialisierungen abgeschlossen sind
-  setTimeout(() => {
-    emitFilters();
-  }, 200);
+  // NICHT automatisch Filter anwenden beim Mounten
+  // Nur anwenden, wenn tatsächlich Werte in props.selected vorhanden sind
+  if ((props.selected.type && props.selected.type.length > 0) ||
+      (props.selected.advisorId && props.selected.advisorId.length > 0) ||
+      (props.selected.legalForm && props.selected.legalForm.length > 0)) {
+    setTimeout(() => {
+      emitFilters();
+    }, 200);
+  }
 });
 
 function reset() {
-  local.type = ['Natürliche Person', 'Gewerbe'];
+  local.type = []; // Alle Filter zurücksetzen
   props.advisors.forEach(a => {
-    checkedAdvisors[a.id] = true;
+    checkedAdvisors[a.id] = false;
   });
   availableLegalForms.value.forEach(lf => {
-    checkedLegal[lf] = true;
+    checkedLegal[lf] = false;
   });
-  emitFilters(); // Automatisch anwenden
+  emitFilters(); // Automatisch anwenden (wird leere Filter senden)
 }
 </script>
 
