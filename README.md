@@ -1,6 +1,6 @@
 # Document Processing System (RechtsUndSteuerKI)
 
-A comprehensive document processing system with AI-powered features, built for legal and tax advisory workflows. The system integrates with Ollama AI models for intelligent document analysis and processing.
+A comprehensive document processing system built for legal and tax advisory workflows.
 
 ## Features
 
@@ -8,14 +8,9 @@ A comprehensive document processing system with AI-powered features, built for l
 - **Document Template Management** - Create, upload, and manage document templates with dynamic placeholders
 - **Client Management** - Comprehensive client database with legal forms and contact information
 - **Workflow Processing** - End-to-end document processing workflows from template to final document
-- **AI Integration** - Powered by Ollama for intelligent text and image processing
 
-### NEW: User Account Settings & AI Configuration
+### NEW: User Account Settings
 - **User Profile Management** - Personalized settings for name, role, and language preferences
-- **Ollama Model Configuration** - Select and configure AI models for text and image processing
-- **Automatic AI Detection** - Real-time checking of Ollama installation and available models
-- **Performance Optimization** - Three-tier recommendation system (low/medium/high performance)
-- **Installation Support** - Guided setup for Ollama with performance-based model suggestions
 
 ## Architecture
 
@@ -25,7 +20,7 @@ RechtsUndSteuerKI/
 │   ├── app/
 │   │   ├── models/   # SQLAlchemy ORM models
 │   │   ├── routes/   # REST API endpoints
-│   │   └── services/ # Business logic and AI integration
+│   │   └── services/ # Business logic
 │   └── requirements.txt
 ├── frontend/         # Vue.js 3 application
 │   ├── src/
@@ -42,7 +37,6 @@ RechtsUndSteuerKI/
 **Backend:**
 - **Framework:** Flask (Python)
 - **Database:** SQLAlchemy ORM with SQLite/PostgreSQL
-- **AI Integration:** Ollama API for LLM/vision models
 - **API:** RESTful endpoints with JSON responses
 
 **Frontend:**
@@ -57,7 +51,6 @@ RechtsUndSteuerKI/
 ### Prerequisites
 - **Python 3.8+** and pip
 - **Node.js 16+** and npm
-- **Ollama** (optional but recommended for AI features)
 
 ### Installation
 
@@ -84,14 +77,6 @@ RechtsUndSteuerKI/
    npm run dev
    ```
 
-4. **Setup Ollama (Optional):**
-   ```bash
-   # Download from https://ollama.com/download
-   # Or use the in-app installer guidance
-   ollama pull llama3
-   ollama pull llava
-   ```
-
 ### Access the Application
 - **Frontend:** http://localhost:5173
 - **Backend API:** http://localhost:5000
@@ -101,11 +86,9 @@ RechtsUndSteuerKI/
 
 ### API Endpoints
 
-**User Management & AI Configuration:**
+**User Management:**
 - `GET /api/users/settings/<id>` - Get user settings
 - `PUT /api/users/settings/<id>` - Update user preferences  
-- `GET /api/users/models` - Get available Ollama models
-- `GET /api/users/ollama-installer` - Get installation guidance
 
 **Document Processing:**
 - `GET /api/documents/templates` - List document templates
@@ -124,35 +107,7 @@ RechtsUndSteuerKI/
 - **Dashboard** - System overview and statistics
 - **Mandate** - Client management interface
 - **Dokumente** - Document template management  
-- **Konto-Einstellungen** - User account and AI model configuration
-
-## AI Integration
-
-### Ollama Models Support
-
-**Text Processing Models:**
-- **llama3** (8b, 13b, 70b) - General purpose language model
-- **mistral** (7b, 22b) - Fast and efficient text processing
-- **gemma** (2b, 7b) - Lightweight text analysis
-
-**Image Processing Models:**
-- **llava** (7b, 13b) - Vision language model for image analysis
-- **bakllava** - Specialized vision model
-- **moondream** - Lightweight image understanding
-
-### Performance Profiles
-
-**Low Performance (8GB RAM, 10GB storage):**
-- Recommended: llama3:8b, mistral:7b, gemma:2b
-- Good for basic document processing
-
-**Medium Performance (16GB RAM, 25GB storage):**
-- Recommended: llama3:13b, mistral:7b-instruct, llava:7b
-- Balanced performance for most use cases
-
-**High Performance (32GB+ RAM, 50GB+ storage):**
-- Recommended: llama3:70b, mistral:22b, llava:13b
-- Best quality for complex document analysis
+- **Konto-Einstellungen** - User account configuration
 
 ## Configuration
 
@@ -164,8 +119,6 @@ FLASK_APP=main.py
 FLASK_ENV=development
 DATABASE_URI=sqlite:///app.db
 SECRET_KEY=your-secret-key
-OLLAMA_API_BASE=http://localhost:11434
-DEFAULT_LLM_MODEL=llama3
 ```
 
 **Frontend (Optional):**
@@ -206,13 +159,10 @@ flask delete-doc <id>
 
 ## Recent Updates
 
-### Version 2.0 - Account Settings & AI Integration
+### Version 2.0 - Account Settings
 - ✅ **User Account Management** - Complete user profile and preferences system
-- ✅ **Ollama Integration** - AI model selection and configuration interface
-- ✅ **Installation Detection** - Automatic checking and guided setup for Ollama
-- ✅ **Performance Optimization** - Model recommendations based on system capabilities
 - ✅ **Type Safety** - Full TypeScript integration for frontend components
-- ✅ **Enhanced API** - New endpoints for user settings and AI model management
+- ✅ **Enhanced API** - New endpoints for user settings
 
 ### Previous Features
 - Document template management with placeholders
@@ -237,8 +187,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 For support and questions:
 - Check the documentation in `/backend/README.md` and `/frontend/README.md`
-- Review API endpoints and model configuration options
-- Use the in-app Ollama installation guidance for AI setup
+- Review API endpoints and configuration options
 
 ---
 

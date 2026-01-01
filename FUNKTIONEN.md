@@ -10,22 +10,20 @@ Eine umfassende Dokumentationsdatei, die alle Funktionen, Module und Features de
 4. [Backend-API](#backend-api)
 5. [Datenmodelle](#datenmodelle)
 6. [Workflows](#workflows)
-7. [AI-Integration](#ai-integration)
-8. [Technische Details](#technische-details)
+7. [Technische Details](#technische-details)
 
 ---
 
 ## Übersicht
 
-**RechtsUndSteuerKI** ist ein umfassendes Dokumentenverarbeitungssystem für Rechts- und Steuerberatungsbüros. Die Software ermöglicht die Verwaltung von Dokumentenvorlagen, Mandanten, Workflows und die intelligente Verarbeitung von Dokumenten mit KI-Unterstützung.
+**RechtsUndSteuerKI** ist ein umfassendes Dokumentenverarbeitungssystem für Rechts- und Steuerberatungsbüros. Die Software ermöglicht die Verwaltung von Dokumentenvorlagen, Mandanten, Workflows und die Verarbeitung von Dokumenten.
 
 ### Hauptmerkmale
 
 - **Dokumentenvorlagen-Management** - Erstellen, Hochladen und Verwalten von Dokumentenvorlagen mit dynamischen Platzhaltern
 - **Mandantenverwaltung** - Umfassende Mandantendatenbank mit Rechtsformen und Kontaktinformationen
 - **Workflow-Verarbeitung** - End-to-End Dokumentenverarbeitung von Vorlage bis finales Dokument
-- **KI-Integration** - Powered by Ollama für intelligente Text- und Bildverarbeitung
-- **Benutzerverwaltung** - Personalisierte Einstellungen und KI-Modell-Konfiguration
+- **Benutzerverwaltung** - Personalisierte Einstellungen
 
 ---
 
@@ -99,38 +97,15 @@ Eine umfassende Dokumentationsdatei, die alle Funktionen, Module und Features de
 - **Status-Verwaltung**: Zu erledigen, In Arbeit, Abgeschlossen
 
 #### Workflow-Verarbeitung
-- **Intelligente Dokumentenverarbeitung**: KI-gestützte Analyse von Dokumenten
-- **Feld-Extraktion**: Automatische Extraktion von Feldern aus Dokumenten
-- **Vorlagen-Vorschlag**: KI schlägt passende Vorlagen vor
-- **Mandanten-Zuordnung**: Automatische Zuordnung zu Mandanten
+- **Dokumentenverarbeitung**: Analyse von Dokumenten
+- **Feld-Extraktion**: Extraktion von Feldern aus Dokumenten
+- **Vorlagen-Auswahl**: Auswahl passender Vorlagen
+- **Mandanten-Zuordnung**: Zuordnung zu Mandanten
 
-### 5. KI-Integration (Ollama)
-
-#### KI-Modell-Konfiguration
-- **Text-Modelle**: 
-  - llama3 (8b, 13b, 70b)
-  - mistral (7b, 22b)
-  - gemma (2b, 7b)
-- **Bild-Modelle**:
-  - llava (7b, 13b)
-  - bakllava
-  - moondream
-- **Performance-Profile**: Low/Medium/High Performance Empfehlungen
-- **Installation**: Geführte Installation von Ollama
-
-#### KI-Funktionen
-- **Dokumentenanalyse**: Intelligente Analyse von Dokumenten
-- **Feld-Extraktion**: Automatische Extraktion von Feldern
-- **Vorlagen-Auswahl**: KI-gestützte Vorlagen-Auswahl
-- **Mandanten-Zuordnung**: Automatische Mandanten-Zuordnung
-
-### 6. Benutzerverwaltung
+### 5. Benutzerverwaltung
 
 #### Benutzer-Einstellungen
 - **Profil**: Name, E-Mail, Rolle, Sprache
-- **KI-Modell-Einstellungen**: Text- und Bild-Modell auswählen
-- **Ollama-Status**: Prüfung der Ollama-Installation
-- **Performance-Einstellungen**: System-Performance konfigurieren
 
 ---
 
@@ -141,7 +116,7 @@ Eine umfassende Dokumentationsdatei, die alle Funktionen, Module und Features de
 #### Dashboard (`/dashboard`)
 - **Übersicht**: Systemübersicht mit Statistiken
 - **Dokumenten-Tabelle**: Liste aller Dokumente mit Filterung und Sortierung
-- **Schnellaktionen**: Dokument erstellen, AI-Agent öffnen
+- **Schnellaktionen**: Dokument erstellen
 - **Filter**: Nach Benutzer, Vorlage, Status, Datum filtern
 
 #### Mandanten (`/clients`)
@@ -180,26 +155,9 @@ Eine umfassende Dokumentationsdatei, die alle Funktionen, Module und Features de
 - **Workflow-Übersicht**: Details eines Workflows
 - **Dokumente**: Liste der Workflow-Dokumente
 - **Status-Verwaltung**: Status ändern
-- **Intelligente Verarbeitung**: KI-gestützte Dokumentenverarbeitung
-
-#### IntelligentDocumentProcessingView (`/workflow/:workflowId/intelligent-processing`)
-- **Dokumenten-Upload**: Mehrere Dokumente hochladen
-- **KI-Analyse**: Automatische Analyse der Dokumente
-- **Feld-Extraktion**: Extraktion von Feldern
-- **Vorlagen-Auswahl**: KI-gestützte Vorlagen-Auswahl
-- **Vorschau**: Vorschau des generierten Dokuments
 
 #### AccountSettingsView (`/account-settings`)
 - **Benutzer-Profil**: Name, E-Mail, Rolle, Sprache
-- **KI-Modell-Einstellungen**: Text- und Bild-Modell auswählen
-- **Ollama-Status**: Prüfung der Ollama-Installation
-- **Installation-Anleitung**: Geführte Installation von Ollama
-
-#### AIAgentView (`/ai-agent`)
-- **KI-Agent**: Interaktiver KI-Agent für Dokumentenverarbeitung
-- **Dokumenten-Upload**: Dokumente für KI-Analyse hochladen
-- **Workflow-Erstellung**: Automatische Workflow-Erstellung
-- **Mandanten-Zuordnung**: KI-gestützte Mandanten-Zuordnung
 
 ### Komponenten
 
@@ -304,16 +262,6 @@ Eine umfassende Dokumentationsdatei, die alle Funktionen, Module und Features de
 - `POST /api/users` - Benutzer erstellen
 - `GET /api/users/settings/<id>` - Benutzer-Einstellungen abrufen
 - `PUT /api/users/settings/<id>` - Benutzer-Einstellungen aktualisieren
-- `GET /api/users/models` - Verfügbare Ollama-Modelle abrufen
-- `GET /api/users/ollama-installer` - Ollama-Installations-Anleitung abrufen
-
-### KI-Agent-Endpunkte
-
-- `POST /api/ai-agent/process-documents` - Dokumente mit KI verarbeiten
-- `POST /api/ai-agent/create-workflow` - Workflow mit KI erstellen
-- `POST /api/ai-agent/analyze-client-match` - Mandanten-Zuordnung analysieren
-- `POST /api/ai-agent/suggest-template` - Vorlage vorschlagen
-- `POST /api/ai-agent/extract-all-fields` - Alle Felder extrahieren
 
 ### Datenbank-Felder
 
@@ -392,8 +340,6 @@ Eine umfassende Dokumentationsdatei, die alle Funktionen, Module und Features de
 - `email`: E-Mail
 - `role`: Rolle
 - `language`: Sprache
-- `text_model`: Text-Modell (Ollama)
-- `image_model`: Bild-Modell (Ollama)
 
 ---
 
@@ -417,10 +363,10 @@ Eine umfassende Dokumentationsdatei, die alle Funktionen, Module und Features de
    - Dokumente hochladen
    - Beteiligte auswählen
    - Vorlage auswählen
-2. **Intelligente Verarbeitung**:
-   - KI analysiert Dokumente
+2. **Verarbeitung**:
+   - Dokumente werden analysiert
    - Felder werden extrahiert
-   - Vorlage wird vorgeschlagen
+   - Vorlage wird ausgewählt
 3. **Dokument generieren**:
    - Dokument wird aus Vorlage generiert
    - Felder werden automatisch ausgefüllt
@@ -436,56 +382,6 @@ Eine umfassende Dokumentationsdatei, die alle Funktionen, Module und Features de
    - Typ, Standardwert, Beschreibung
    - Mit Datenbankfeldern verknüpfen
 5. **Speichern**: Vorlage speichern (mit `contentHtml` und Platzhaltern)
-
----
-
-## AI-Integration
-
-### Ollama-Integration
-
-#### Verfügbare Modelle
-
-**Text-Modelle:**
-- `llama3:8b` - Leichtgewichtiges Modell für grundlegende Aufgaben
-- `llama3:13b` - Ausgewogenes Modell für die meisten Anwendungsfälle
-- `llama3:70b` - Hochleistungsmodell für komplexe Aufgaben
-- `mistral:7b` - Schnelles und effizientes Modell
-- `mistral:22b` - Hochleistungsmodell
-- `gemma:2b` - Sehr leichtgewichtiges Modell
-- `gemma:7b` - Leichtgewichtiges Modell
-
-**Bild-Modelle:**
-- `llava:7b` - Vision-Sprachmodell für Bildanalyse
-- `llava:13b` - Hochleistungs-Vision-Modell
-- `bakllava` - Spezialisiertes Vision-Modell
-- `moondream` - Leichtgewichtiges Bildverständnis
-
-#### Performance-Profile
-
-**Low Performance (8GB RAM, 10GB Storage):**
-- Empfohlen: `llama3:8b`, `mistral:7b`, `gemma:2b`
-- Geeignet für: Grundlegende Dokumentenverarbeitung
-
-**Medium Performance (16GB RAM, 25GB Storage):**
-- Empfohlen: `llama3:13b`, `mistral:7b-instruct`, `llava:7b`
-- Geeignet für: Ausgewogene Leistung für die meisten Anwendungsfälle
-
-**High Performance (32GB+ RAM, 50GB+ Storage):**
-- Empfohlen: `llama3:70b`, `mistral:22b`, `llava:13b`
-- Geeignet für: Beste Qualität für komplexe Dokumentenanalyse
-
-### KI-Funktionen
-
-#### Dokumentenanalyse
-- **Text-Extraktion**: Extraktion von Text aus Dokumenten
-- **Feld-Erkennung**: Erkennung von Feldern in Dokumenten
-- **Struktur-Erkennung**: Erkennung der Dokumentenstruktur
-
-#### Intelligente Verarbeitung
-- **Vorlagen-Auswahl**: KI schlägt passende Vorlagen vor
-- **Mandanten-Zuordnung**: Automatische Zuordnung zu Mandanten
-- **Feld-Extraktion**: Automatische Extraktion von Feldern
-- **Workflow-Erstellung**: Automatische Workflow-Erstellung
 
 ---
 
@@ -515,16 +411,13 @@ Eine umfassende Dokumentationsdatei, die alle Funktionen, Module und Features de
 #### Technologie-Stack
 - **Framework**: Flask (Python)
 - **Datenbank**: SQLAlchemy ORM mit SQLite/PostgreSQL
-- **AI-Integration**: Ollama API
 - **API**: RESTful Endpoints mit JSON
 
 #### Wichtige Dateien
 - `app/routes/routes.py` - API-Endpunkte
 - `app/models/` - Datenmodelle
 - `app/services/` - Business-Logik
-- `app/services/agent_service.py` - KI-Agent-Service
 - `app/services/document_service.py` - Dokumenten-Service
-- `app/services/llm_service.py` - Ollama-Service
 
 ### Datenbank-Schema
 
@@ -642,8 +535,7 @@ npm run test
 
 Für Fragen und Support:
 - Dokumentation in `/backend/README.md` und `/frontend/README.md`
-- API-Endpunkte und Modell-Konfiguration
-- In-App Ollama-Installations-Anleitung
+- API-Endpunkte und Konfiguration
 
 ---
 
