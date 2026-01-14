@@ -1,17 +1,5 @@
 # Document Processing System (RechtsUndSteuerKI)
 
-A comprehensive document processing system built for legal and tax advisory workflows.
-
-## Features
-
-### Core Functionality
-- **Document Template Management** - Create, upload, and manage document templates with dynamic placeholders
-- **Client Management** - Comprehensive client database with legal forms and contact information
-- **Workflow Processing** - End-to-end document processing workflows from template to final document
-
-### NEW: User Account Settings
-- **User Profile Management** - Personalized settings for name, role, and language preferences
-
 ## Architecture
 
 ```
