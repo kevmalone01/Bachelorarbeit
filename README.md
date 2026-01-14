@@ -199,38 +199,4 @@ flask show-db
 flask delete-doc <id>
 ```
 
-## Recent Updates
-
-### Version 2.0 - Account Settings
-- ✅ **User Account Management** - Complete user profile and preferences system
-- ✅ **Type Safety** - Full TypeScript integration for frontend components
-- ✅ **Enhanced API** - New endpoints for user settings
-
-### Previous Features
-- Document template management with placeholders
-- Client database with legal forms
-- Workflow processing and document generation  
-- Responsive Vue.js frontend with modern UI
-- RESTful API with comprehensive error handling
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/new-feature`)
-3. Commit your changes (`git commit -am 'Add new feature'`)
-4. Push to the branch (`git push origin feature/new-feature`)
-5. Create a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
-
-For support and questions:
-- Check the documentation in `/backend/README.md` and `/frontend/README.md`
-- Review API endpoints and configuration options
-
----
-
-**Built with ❤️ for legal and tax advisory professionals**
+ 
