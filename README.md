@@ -77,10 +77,52 @@ RechtsUndSteuerKI/
    npm run dev
    ```
 
-### Access the Application
-- **Frontend:** http://localhost:5173
+## 🚀 Anwendung starten
+
+### Backend starten
+
+1. **Navigieren Sie zum Backend-Verzeichnis:**
+   ```bash
+   cd backend
+   ```
+
+2. **Aktivieren Sie die virtuelle Umgebung:**
+   ```bash
+   source .venv/bin/activate  # Linux/Mac
+   # oder
+   .venv\Scripts\activate     # Windows
+   ```
+
+3. **Starten Sie den Flask-Server:**
+   ```bash
+   flask run
+   # oder
+   python main.py
+   ```
+
+   Der Backend-Server läuft nun auf **http://localhost:5000**
+
+### Frontend starten
+
+1. **Öffnen Sie ein neues Terminal und navigieren Sie zum Frontend-Verzeichnis:**
+   ```bash
+   cd frontend
+   ```
+
+2. **Starten Sie den Development-Server:**
+   ```bash
+   npm run dev
+   ```
+
+   Der Frontend-Server läuft nun auf **http://localhost:5173**
+
+### Zugriff auf die Anwendung
+
+- **Frontend (Web-Interface):** http://localhost:5173
 - **Backend API:** http://localhost:5000
-- **Account Settings:** Navigate to "Konto-Einstellungen" in the app
+- **Account Settings:** Navigieren Sie zu "Konto-Einstellungen" in der App
+
+**Wichtig:** Stellen Sie sicher, dass sowohl Backend als auch Frontend gleichzeitig laufen, damit die Anwendung vollständig funktioniert.
 
 ## Documentation
 
